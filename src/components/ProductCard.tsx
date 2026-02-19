@@ -1,17 +1,45 @@
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Star, ShoppingBag } from 'lucide-react';
-import { Product, formatCurrency } from '@/data/products';
+import { formatCurrency, getSmartPriceFromRules } from '@/hooks/useProducts';
+import type { DBProduct, DBPriceRule, DBVariant } from '@/hooks/useProducts';
 import { useCart } from '@/context/CartContext';
 import collectionImg from '@/assets/collection-lipgloss.jpg';
 
 interface ProductCardProps {
-  product: Product;
+  product: DBProduct & { variants: DBVariant[]; priceRules: DBPriceRule[] };
   index?: number;
 }
 
 const ProductCard = ({ product, index = 0 }: ProductCardProps) => {
   const { addItem } = useCart();
+  const box12 = getSmartPriceFromRules(product.retail_price, product.priceRules, 12);
+
+  const handleAddToCart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    // Build legacy Product shape for cart compatibility
+    const legacyProduct = {
+      id: product.id,
+      name: product.name,
+      slug: product.slug,
+      description: product.description,
+      shortDescription: product.short_description,
+      retailPrice: product.retail_price,
+      box06Price: getSmartPriceFromRules(product.retail_price, product.priceRules, 6).price,
+      box12Price: box12.price,
+      images: product.images,
+      collection: 'bestsellers' as const,
+      colors: product.variants.map(v => v.name),
+      badge: product.badge as any,
+      rating: product.rating,
+      reviews: product.reviews_count,
+      idealForResale: product.ideal_for_resale,
+      suggestedMargin: product.suggested_margin,
+      unitsPerBox06: 6,
+      unitsPerBox12: 12,
+    };
+    addItem(legacyProduct, 1, product.variants[0]?.name || 'Padrão');
+  };
 
   return (
     <motion.div
@@ -24,7 +52,7 @@ const ProductCard = ({ product, index = 0 }: ProductCardProps) => {
       <Link to={`/produto/${product.slug}`} className="block">
         <div className="relative overflow-hidden rounded-sm bg-secondary aspect-[3/4] mb-4">
           <img
-            src={collectionImg}
+            src={product.images?.[0] || collectionImg}
             alt={product.name}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
             loading="lazy"
@@ -34,7 +62,7 @@ const ProductCard = ({ product, index = 0 }: ProductCardProps) => {
               {product.badge}
             </span>
           )}
-          {product.idealForResale && (
+          {product.ideal_for_resale && (
             <span className="absolute top-3 right-3 bg-accent text-accent-foreground text-[10px] font-body font-bold tracking-wider uppercase px-3 py-1.5 rounded-sm">
               Ideal Revenda
             </span>
@@ -42,10 +70,7 @@ const ProductCard = ({ product, index = 0 }: ProductCardProps) => {
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
-            onClick={(e) => {
-              e.preventDefault();
-              addItem(product, 1, product.colors[0]);
-            }}
+            onClick={handleAddToCart}
             className="absolute bottom-3 right-3 bg-background/90 backdrop-blur-sm text-foreground p-3 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-soft"
           >
             <ShoppingBag className="w-4 h-4" />
@@ -56,17 +81,19 @@ const ProductCard = ({ product, index = 0 }: ProductCardProps) => {
           <h3 className="font-display text-base font-medium text-foreground group-hover:text-primary transition-colors">
             {product.name}
           </h3>
-          <p className="text-xs font-body text-muted-foreground">{product.shortDescription}</p>
+          <p className="text-xs font-body text-muted-foreground">{product.short_description}</p>
           <div className="flex items-center gap-1.5">
             <Star className="w-3.5 h-3.5 fill-gold text-gold" />
             <span className="text-xs font-body text-foreground font-medium">{product.rating}</span>
-            <span className="text-xs font-body text-muted-foreground">({product.reviews})</span>
+            <span className="text-xs font-body text-muted-foreground">({product.reviews_count})</span>
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="font-body font-semibold text-foreground">{formatCurrency(product.retailPrice)}</span>
-            <span className="text-xs font-body text-primary font-medium">
-              a partir de {formatCurrency(product.box12Price)} no atacado
-            </span>
+            <span className="font-body font-semibold text-foreground">{formatCurrency(product.retail_price)}</span>
+            {box12.discount > 0 && (
+              <span className="text-xs font-body text-primary font-medium">
+                a partir de {formatCurrency(box12.price)} no atacado
+              </span>
+            )}
           </div>
         </div>
       </Link>

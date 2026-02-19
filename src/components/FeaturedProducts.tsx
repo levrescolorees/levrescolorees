@@ -1,8 +1,11 @@
-import { products } from '@/data/products';
+import { useStorefrontProducts } from '@/hooks/useProducts';
 import ProductCard from './ProductCard';
 
 const FeaturedProducts = () => {
-  const featured = products.filter(p => p.badge === 'Mais Vendido').slice(0, 4);
+  const { data: products, isLoading } = useStorefrontProducts();
+  const featured = products?.filter(p => p.badge === 'Mais Vendido').slice(0, 4) ?? [];
+
+  if (isLoading || featured.length === 0) return null;
 
   return (
     <section className="py-16 md:py-24 bg-background">
