@@ -9,42 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 
-// ─── Store Settings Hook ──────────────────────────────────
-function useStoreSettings() {
-  return useQuery({
-    queryKey: ['store_settings'],
-    queryFn: async () => {
-      const { data, error } = await supabase.from('store_settings').select('*');
-      if (error) throw error;
-      const map: Record<string, any> = {};
-      data.forEach((r: any) => { map[r.key] = r.value; });
-      return map;
-    },
-  });
-}
-
-// ─── Shipping Rules Hook ──────────────────────────────────
-interface ShippingRule {
-  id: string;
-  name: string;
-  rule_type: string;
-  value: number;
-  state: string | null;
-  min_order_for_free: number | null;
-  is_active: boolean;
-  sort_order: number;
-}
-
-function useShippingRules() {
-  return useQuery({
-    queryKey: ['admin', 'shipping_rules'],
-    queryFn: async () => {
-      const { data, error } = await supabase.from('shipping_rules').select('*').order('sort_order');
-      if (error) throw error;
-      return data as ShippingRule[];
-    },
-  });
-}
+import { useStoreSettings, useShippingRules } from '@/hooks/useStoreSettings';
 
 // ─── Component ────────────────────────────────────────────
 const AdminSettings = () => {
@@ -71,10 +36,10 @@ const AdminSettings = () => {
 
   useEffect(() => {
     if (settings) {
-      const brand = settings.brand || {};
+      const brand = (settings.brand || {}) as any;
       setBrandName(brand.name || '');
       setBrandTagline(brand.tagline || '');
-      const hero = settings.hero || {};
+      const hero = (settings.hero || {}) as any;
       setHeroHeadline(hero.headline || '');
       setHeroSubheadline(hero.subheadline || '');
       setHeroCtaText(hero.cta_text || '');

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowLeft, ShieldCheck, CreditCard, QrCode, FileText, Check, Tag } from 'lucide-react';
@@ -7,6 +7,7 @@ import Footer from '@/components/Footer';
 import { useCart } from '@/context/CartContext';
 import { getSmartPrice, formatCurrency } from '@/data/products';
 import { useCreateOrder } from '@/hooks/useOrders';
+import { useShippingRules } from '@/hooks/useStoreSettings';
 import { supabase } from '@/integrations/supabase/client';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -17,6 +18,7 @@ type PaymentMethod = 'pix' | 'cartao' | 'boleto';
 const Checkout = () => {
   const { items, totalSmart, totalSavings, clearCart } = useCart();
   const createOrder = useCreateOrder();
+  const { data: shippingRules } = useShippingRules();
   const [payment, setPayment] = useState<PaymentMethod>('pix');
   const [isWholesale, setIsWholesale] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -64,6 +66,20 @@ const Checkout = () => {
       setCouponLoading(false);
     }
   };
+  const shipping = useMemo(() => {
+    if (!shippingRules?.length) return totalSmart >= 299 ? 0 : 19.90;
+    const freeRule = shippingRules.find(r => r.rule_type === 'free_above');
+    if (freeRule && freeRule.min_order_for_free && totalSmart >= freeRule.min_order_for_free) return 0;
+    const stateUpper = state.toUpperCase().trim();
+    if (stateUpper) {
+      const stateRule = shippingRules.find(r => r.rule_type === 'by_state' && r.state?.toUpperCase() === stateUpper);
+      if (stateRule) return stateRule.value;
+    }
+    const fixedRule = shippingRules.find(r => r.rule_type === 'fixed');
+    if (fixedRule) return fixedRule.value;
+    if (freeRule) return freeRule.value;
+    return 19.90;
+  }, [shippingRules, totalSmart, state]);
 
   if (submitted) {
     return (
@@ -104,7 +120,6 @@ const Checkout = () => {
     );
   }
 
-  const shipping = totalSmart >= 299 ? 0 : 19.90;
   const couponDiscount = appliedCoupon
     ? appliedCoupon.discount_type === 'percentage'
       ? totalSmart * (appliedCoupon.discount_value / 100)

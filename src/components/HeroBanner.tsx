@@ -1,8 +1,17 @@
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import heroBanner from '@/assets/hero-banner.jpg';
+import { useStoreSettings } from '@/hooks/useStoreSettings';
 
 const HeroBanner = () => {
+  const { data: settings } = useStoreSettings();
+  const hero = settings?.hero;
+
+  const headline = hero?.headline || 'Seus lábios, sua assinatura.';
+  const subheadline = hero?.subheadline || 'Cores vibrantes, texturas irresistíveis. Do varejo ao atacado, encontre o mix perfeito para brilhar — ou revender.';
+  const ctaText = hero?.cta_text || 'Comprar Agora';
+  const ctaLink = hero?.cta_link || '/colecoes';
+
   return (
     <section className="relative min-h-[85vh] md:min-h-[90vh] flex items-center overflow-hidden">
       {/* Background */}
@@ -27,18 +36,22 @@ const HeroBanner = () => {
             Nova Coleção 2025
           </motion.span>
           <h1 className="font-display text-4xl md:text-6xl lg:text-7xl font-bold text-primary-foreground leading-tight mb-6">
-            Seus lábios,<br />
-            <span className="italic text-rose-glow">sua assinatura.</span>
+            {headline.includes(',') ? (
+              <>
+                {headline.split(',')[0]},<br />
+                <span className="italic text-rose-glow">{headline.split(',').slice(1).join(',').trim()}</span>
+              </>
+            ) : headline}
           </h1>
           <p className="text-primary-foreground/80 text-base md:text-lg font-body leading-relaxed mb-8 max-w-md">
-            Cores vibrantes, texturas irresistíveis. Do varejo ao atacado, encontre o mix perfeito para brilhar — ou revender.
+            {subheadline}
           </p>
           <div className="flex flex-col sm:flex-row gap-4">
             <Link
-              to="/colecoes"
+              to={ctaLink}
               className="inline-flex items-center justify-center bg-gradient-rose text-primary-foreground font-body font-semibold text-sm tracking-wider uppercase px-8 py-4 rounded-sm hover:opacity-90 transition-opacity shadow-rose"
             >
-              Comprar Agora
+              {ctaText}
             </Link>
             <Link
               to="/atacado"
