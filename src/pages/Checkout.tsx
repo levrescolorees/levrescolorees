@@ -140,12 +140,20 @@ const Checkout = () => {
               </div>
             )}
 
-            <Link
-              to="/"
-              className="inline-flex items-center justify-center bg-gradient-rose text-primary-foreground font-body font-semibold text-sm tracking-wider uppercase px-8 py-4 rounded-sm shadow-rose"
-            >
-              Voltar à Loja
-            </Link>
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              <Link
+                to="/rastreio"
+                className="inline-flex items-center justify-center border-2 border-primary text-primary font-body font-semibold text-sm tracking-wider uppercase px-8 py-4 rounded-sm hover:bg-primary/5 transition-colors"
+              >
+                Rastrear Pedido
+              </Link>
+              <Link
+                to="/"
+                className="inline-flex items-center justify-center bg-gradient-rose text-primary-foreground font-body font-semibold text-sm tracking-wider uppercase px-8 py-4 rounded-sm shadow-rose"
+              >
+                Voltar à Loja
+              </Link>
+            </div>
           </motion.div>
         </main>
         <Footer />

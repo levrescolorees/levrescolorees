@@ -11,6 +11,7 @@ import ProductDetail from "./pages/ProductDetail";
 import Cart from "./pages/Cart";
 import Atacado from "./pages/Atacado";
 import Checkout from "./pages/Checkout";
+import OrderTracking from "./pages/OrderTracking";
 import NotFound from "./pages/NotFound";
 import AdminLogin from "./pages/admin/AdminLogin";
 import AdminLayout from "./pages/admin/AdminLayout";
@@ -43,6 +44,7 @@ const App = () => (
               <Route path="/carrinho" element={<Cart />} />
               <Route path="/atacado" element={<Atacado />} />
               <Route path="/checkout" element={<Checkout />} />
+              <Route path="/rastreio" element={<OrderTracking />} />
 
               {/* Admin */}
               <Route path="/admin/login" element={<AdminLogin />} />
