@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { LogIn, AlertCircle } from 'lucide-react';
@@ -7,12 +7,19 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 
 const AdminLogin = () => {
-  const { signIn } = useAuth();
+  const { signIn, user, isStaff, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Redirect if already authenticated as staff
+  useEffect(() => {
+    if (!authLoading && user && isStaff) {
+      navigate('/admin', { replace: true });
+    }
+  }, [authLoading, user, isStaff, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -22,9 +29,8 @@ const AdminLogin = () => {
     setLoading(false);
     if (error) {
       setError('Email ou senha inválidos.');
-    } else {
-      navigate('/admin');
     }
+    // Navigation will happen via the useEffect above once auth state updates
   };
 
   return (
