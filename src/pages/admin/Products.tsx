@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Search, ToggleLeft, ToggleRight, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Search, ToggleLeft, ToggleRight, Pencil, Trash2, Download } from 'lucide-react';
 import { useAdminProducts, useDeleteProduct, useToggleProduct, formatCurrency } from '@/hooks/useProducts';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -21,15 +21,28 @@ const Products = () => {
     p.sku?.toLowerCase().includes(search.toLowerCase())
   ) ?? [];
 
+  const exportCSV = () => {
+    if (!filtered.length) return;
+    const headers = ['Nome', 'SKU', 'Preço', 'Estoque', 'Status'];
+    const rows = filtered.map(p => [p.name, p.sku || '', p.retail_price, p.stock, p.is_active ? 'Ativo' : 'Inativo']);
+    const csv = [headers, ...rows].map(r => r.join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'produtos.csv'; a.click();
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="font-display text-2xl font-bold text-foreground">Produtos</h1>
-        <Button asChild>
-          <Link to="/admin/produtos/novo">
-            <Plus className="w-4 h-4 mr-2" /> Novo Produto
-          </Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={exportCSV}><Download className="w-4 h-4 mr-2" /> Exportar</Button>
+          <Button asChild>
+            <Link to="/admin/produtos/novo">
+              <Plus className="w-4 h-4 mr-2" /> Novo Produto
+            </Link>
+          </Button>
+        </div>
       </div>
 
       <div className="relative max-w-sm">

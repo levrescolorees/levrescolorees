@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { Search, Users } from 'lucide-react';
+import { Search, Users, Download } from 'lucide-react';
 import { useAdminCustomers } from '@/hooks/useOrders';
 import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 
 const AdminCustomers = () => {
   const { data: customers, isLoading } = useAdminCustomers();
@@ -13,13 +14,26 @@ const AdminCustomers = () => {
     return c.name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q) || c.cpf.includes(q);
   }) ?? [];
 
+  const exportCSV = () => {
+    if (!filtered.length) return;
+    const headers = ['Nome', 'Email', 'Telefone', 'CPF', 'Tipo', 'Desde'];
+    const rows = filtered.map(c => [c.name, c.email, c.phone, c.cpf, c.is_reseller ? 'Revendedor' : 'Consumidor', new Date(c.created_at).toLocaleDateString('pt-BR')]);
+    const csv = [headers, ...rows].map(r => r.join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'clientes.csv'; a.click();
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="font-display text-2xl font-bold text-foreground">Clientes</h1>
-        <span className="font-body text-sm text-muted-foreground flex items-center gap-1">
-          <Users className="w-4 h-4" /> {customers?.length ?? 0} total
-        </span>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={exportCSV}><Download className="w-4 h-4 mr-2" /> Exportar</Button>
+          <span className="font-body text-sm text-muted-foreground flex items-center gap-1">
+            <Users className="w-4 h-4" /> {customers?.length ?? 0} total
+          </span>
+        </div>
       </div>
 
       <div className="relative max-w-sm">

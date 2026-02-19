@@ -23,7 +23,7 @@ import OrderDetail from "./pages/admin/OrderDetail";
 import AdminCustomers from "./pages/admin/AdminCustomers";
 import AdminCoupons from "./pages/admin/AdminCoupons";
 import AdminSettings from "./pages/admin/AdminSettings";
-import Placeholder from "./pages/admin/Placeholder";
+import AdminMedia from "./pages/admin/AdminMedia";
 
 const queryClient = new QueryClient();
 
@@ -55,7 +55,7 @@ const App = () => (
                 <Route path="pedidos/:id" element={<OrderDetail />} />
                 <Route path="clientes" element={<AdminCustomers />} />
                 <Route path="cupons" element={<AdminCoupons />} />
-                <Route path="midia" element={<Placeholder />} />
+                <Route path="midia" element={<AdminMedia />} />
                 <Route path="configuracoes" element={<AdminSettings />} />
               </Route>
 
