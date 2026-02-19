@@ -111,10 +111,10 @@ const Cart = () => {
                   </div>
                 )}
 
-                <button className="w-full bg-gradient-rose text-primary-foreground font-body font-semibold text-sm tracking-wider uppercase px-6 py-4 rounded-sm hover:opacity-90 transition-opacity shadow-rose">
+                <Link to="/checkout" className="block w-full text-center bg-gradient-rose text-primary-foreground font-body font-semibold text-sm tracking-wider uppercase px-6 py-4 rounded-sm hover:opacity-90 transition-opacity shadow-rose">
                   Finalizar Compra
-                </button>
-                <p className="text-xs font-body text-muted-foreground text-center">Pix, Cartão ou Boleto • Compra Segura</p>
+                </Link>
+                <p className="text-xs font-body text-muted-foreground text-center">Pix com 5% off • Frete grátis acima de R$299</p>
               </div>
             </div>
           </div>

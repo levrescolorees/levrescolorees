@@ -47,6 +47,24 @@ const HeroBanner = () => {
               Comprar no Atacado
             </Link>
           </div>
+
+          {/* Trust badge */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.8 }}
+            className="flex items-center gap-4 mt-8"
+          >
+            <div className="flex -space-x-2">
+              {[1,2,3,4].map(i => (
+                <div key={i} className="w-8 h-8 rounded-full bg-primary-foreground/20 border-2 border-primary-foreground/40" />
+              ))}
+            </div>
+            <div>
+              <p className="text-primary-foreground text-xs font-body font-semibold">+2.500 clientes satisfeitas</p>
+              <p className="text-primary-foreground/60 text-[10px] font-body">⭐ 4.8/5 avaliação média</p>
+            </div>
+          </motion.div>
         </motion.div>
       </div>
     </section>
