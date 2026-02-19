@@ -1,9 +1,12 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Search, ToggleLeft, ToggleRight, Pencil, Trash2, Download } from 'lucide-react';
+import { Plus, Search, ToggleLeft, ToggleRight, Pencil, Trash2, Download, Upload } from 'lucide-react';
 import { useAdminProducts, useDeleteProduct, useToggleProduct, formatCurrency } from '@/hooks/useProducts';
+import { supabase } from '@/integrations/supabase/client';
+import { useQueryClient } from '@tanstack/react-query';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { toast } from 'sonner';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -14,7 +17,10 @@ const Products = () => {
   const { data: products, isLoading } = useAdminProducts();
   const deleteProduct = useDeleteProduct();
   const toggleProduct = useToggleProduct();
+  const qc = useQueryClient();
   const [search, setSearch] = useState('');
+  const [importing, setImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const filtered = products?.filter(p =>
     p.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -31,11 +37,62 @@ const Products = () => {
     const a = document.createElement('a'); a.href = url; a.download = 'produtos.csv'; a.click();
   };
 
+  const importCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImporting(true);
+    try {
+      const text = await file.text();
+      const lines = text.split('\n').filter(l => l.trim());
+      if (lines.length < 2) { toast.error('CSV vazio ou sem dados.'); return; }
+      const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+      const nameIdx = headers.findIndex(h => h === 'nome' || h === 'name');
+      const skuIdx = headers.findIndex(h => h === 'sku');
+      const priceIdx = headers.findIndex(h => h.includes('preco') || h.includes('preço') || h === 'price' || h === 'retail_price');
+      const stockIdx = headers.findIndex(h => h === 'estoque' || h === 'stock');
+      const descIdx = headers.findIndex(h => h.includes('descri') || h === 'description');
+
+      if (nameIdx === -1) { toast.error('Coluna "Nome" não encontrada no CSV.'); return; }
+
+      const rows = lines.slice(1).map(line => {
+        const cols = line.split(',').map(c => c.trim());
+        const name = cols[nameIdx] || '';
+        if (!name) return null;
+        const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+        return {
+          name,
+          slug: slug + '-' + Date.now().toString(36),
+          sku: skuIdx >= 0 ? cols[skuIdx] || null : null,
+          retail_price: priceIdx >= 0 ? Number(cols[priceIdx]) || 0 : 0,
+          stock: stockIdx >= 0 ? Number(cols[stockIdx]) || 0 : 0,
+          description: descIdx >= 0 ? cols[descIdx] || '' : '',
+          short_description: '',
+        };
+      }).filter(Boolean);
+
+      if (!rows.length) { toast.error('Nenhum produto válido encontrado.'); return; }
+
+      const { error } = await supabase.from('products').insert(rows as any[]);
+      if (error) throw error;
+      qc.invalidateQueries({ queryKey: ['admin', 'products'] });
+      toast.success(`${rows.length} produto(s) importado(s)!`);
+    } catch (err: any) {
+      toast.error('Erro na importação: ' + (err.message || 'Tente novamente.'));
+    } finally {
+      setImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="font-display text-2xl font-bold text-foreground">Produtos</h1>
         <div className="flex items-center gap-2">
+          <input ref={fileInputRef} type="file" accept=".csv" className="hidden" onChange={importCSV} />
+          <Button variant="outline" onClick={() => fileInputRef.current?.click()} disabled={importing}>
+            <Upload className="w-4 h-4 mr-2" /> {importing ? 'Importando...' : 'Importar CSV'}
+          </Button>
           <Button variant="outline" onClick={exportCSV}><Download className="w-4 h-4 mr-2" /> Exportar</Button>
           <Button asChild>
             <Link to="/admin/produtos/novo">

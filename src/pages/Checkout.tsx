@@ -81,19 +81,65 @@ const Checkout = () => {
     return 19.90;
   }, [shippingRules, totalSmart, state]);
 
+  const couponDiscount = appliedCoupon
+    ? appliedCoupon.discount_type === 'percentage'
+      ? totalSmart * (appliedCoupon.discount_value / 100)
+      : appliedCoupon.discount_value
+    : 0;
+  const afterCoupon = totalSmart - couponDiscount + shipping;
+  const pixDiscount = payment === 'pix' ? afterCoupon * 0.05 : 0;
+  const finalTotal = afterCoupon - pixDiscount;
+
   if (submitted) {
     return (
       <div className="min-h-screen bg-background">
         <Header />
         <main className="container mx-auto px-4 py-20 text-center max-w-lg">
-          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}>
-            <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-primary/10 mb-6">
+          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="space-y-6">
+            <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-primary/10 mb-2">
               <Check className="w-10 h-10 text-primary" />
             </div>
-            <h1 className="font-display text-3xl font-bold text-foreground mb-3">Pedido Confirmado!</h1>
-            <p className="font-body text-muted-foreground mb-8">
+            <h1 className="font-display text-3xl font-bold text-foreground">Pedido Confirmado!</h1>
+            <p className="font-body text-muted-foreground">
               Obrigada pela sua compra. Você receberá os detalhes por e-mail em instantes.
             </p>
+
+            {/* Payment-specific instructions */}
+            {payment === 'pix' && (
+              <div className="bg-card rounded-sm shadow-soft p-6 text-left space-y-3">
+                <h3 className="font-display text-sm font-semibold text-foreground flex items-center gap-2"><QrCode className="w-4 h-4 text-primary" /> Pagamento via Pix</h3>
+                <div className="bg-muted/30 rounded-md p-4 flex items-center justify-center">
+                  <div className="w-40 h-40 bg-muted rounded-md flex items-center justify-center border border-border">
+                    <QrCode className="w-20 h-20 text-muted-foreground/50" />
+                  </div>
+                </div>
+                <p className="font-body text-xs text-muted-foreground text-center">Escaneie o QR Code ou copie a chave abaixo</p>
+                <div className="flex gap-2">
+                  <Input readOnly value="00020126580014br.gov.bcb.pix..." className="font-body text-xs" />
+                  <Button variant="outline" size="sm" onClick={() => { navigator.clipboard.writeText('00020126580014br.gov.bcb.pix...'); toast.success('Chave copiada!'); }}>Copiar</Button>
+                </div>
+                <p className="font-body text-xs text-muted-foreground">⏱ Validade: 30 minutos. Valor: <strong>{formatCurrency(finalTotal)}</strong></p>
+              </div>
+            )}
+
+            {payment === 'boleto' && (
+              <div className="bg-card rounded-sm shadow-soft p-6 text-left space-y-3">
+                <h3 className="font-display text-sm font-semibold text-foreground flex items-center gap-2"><FileText className="w-4 h-4 text-primary" /> Boleto Bancário</h3>
+                <div className="flex gap-2">
+                  <Input readOnly value="23793.38128 60000.000003 00000.000402 1 84340000012345" className="font-body text-xs" />
+                  <Button variant="outline" size="sm" onClick={() => { navigator.clipboard.writeText('23793.38128 60000.000003 00000.000402 1 84340000012345'); toast.success('Código copiado!'); }}>Copiar</Button>
+                </div>
+                <p className="font-body text-xs text-muted-foreground">Vencimento em 3 dias úteis. Valor: <strong>{formatCurrency(finalTotal)}</strong></p>
+              </div>
+            )}
+
+            {payment === 'cartao' && (
+              <div className="bg-card rounded-sm shadow-soft p-6 text-left space-y-2">
+                <h3 className="font-display text-sm font-semibold text-foreground flex items-center gap-2"><CreditCard className="w-4 h-4 text-primary" /> Pagamento Aprovado</h3>
+                <p className="font-body text-sm text-muted-foreground">Pagamento de <strong>{formatCurrency(finalTotal)}</strong> aprovado no cartão final ****1234.</p>
+              </div>
+            )}
+
             <Link
               to="/"
               className="inline-flex items-center justify-center bg-gradient-rose text-primary-foreground font-body font-semibold text-sm tracking-wider uppercase px-8 py-4 rounded-sm shadow-rose"
@@ -120,14 +166,6 @@ const Checkout = () => {
     );
   }
 
-  const couponDiscount = appliedCoupon
-    ? appliedCoupon.discount_type === 'percentage'
-      ? totalSmart * (appliedCoupon.discount_value / 100)
-      : appliedCoupon.discount_value
-    : 0;
-  const afterCoupon = totalSmart - couponDiscount + shipping;
-  const pixDiscount = payment === 'pix' ? afterCoupon * 0.05 : 0;
-  const finalTotal = afterCoupon - pixDiscount;
 
   const handleSubmit = async () => {
     if (!name || !email || !phone || !cpf || !street || !number || !city || !state || !zip) {
