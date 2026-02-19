@@ -5,16 +5,34 @@ import { ArrowLeft, ShieldCheck, CreditCard, QrCode, FileText, Check } from 'luc
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import { useCart } from '@/context/CartContext';
-import { formatCurrency, getSmartPrice } from '@/data/products';
+import { getSmartPrice, formatCurrency } from '@/data/products';
+import { useCreateOrder } from '@/hooks/useOrders';
 import { Input } from '@/components/ui/input';
+import { toast } from 'sonner';
 
 type PaymentMethod = 'pix' | 'cartao' | 'boleto';
 
 const Checkout = () => {
-  const { items, totalSmart, totalSavings } = useCart();
+  const { items, totalSmart, totalSavings, clearCart } = useCart();
+  const createOrder = useCreateOrder();
   const [payment, setPayment] = useState<PaymentMethod>('pix');
   const [isWholesale, setIsWholesale] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+
+  // Form state
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [cpf, setCpf] = useState('');
+  const [cnpj, setCnpj] = useState('');
+  const [companyName, setCompanyName] = useState('');
+  const [zip, setZip] = useState('');
+  const [street, setStreet] = useState('');
+  const [number, setNumber] = useState('');
+  const [complement, setComplement] = useState('');
+  const [neighborhood, setNeighborhood] = useState('');
+  const [city, setCity] = useState('');
+  const [state, setState] = useState('');
 
   if (submitted) {
     return (
@@ -57,7 +75,48 @@ const Checkout = () => {
 
   const shipping = totalSmart >= 299 ? 0 : 19.90;
   const total = totalSmart + shipping;
-  const pixDiscount = total * 0.05;
+  const pixDiscount = payment === 'pix' ? total * 0.05 : 0;
+  const finalTotal = total - pixDiscount;
+
+  const handleSubmit = async () => {
+    if (!name || !email || !phone || !cpf || !street || !number || !city || !state || !zip) {
+      toast.error('Preencha todos os campos obrigatórios.');
+      return;
+    }
+
+    try {
+      await createOrder.mutateAsync({
+        customer: {
+          name, email, phone, cpf,
+          cnpj: isWholesale ? cnpj : null,
+          company_name: isWholesale ? companyName : null,
+          is_reseller: isWholesale,
+        },
+        items: items.map(item => {
+          const smart = getSmartPrice(item.product.retailPrice, item.product.box06Price, item.product.box12Price, item.quantity);
+          return {
+            product_id: item.product.id,
+            variant_id: null,
+            product_name: item.product.name,
+            variant_name: item.selectedColor || null,
+            quantity: item.quantity,
+            unit_price: smart.price,
+          };
+        }),
+        subtotal: totalSmart,
+        shipping,
+        discount: pixDiscount,
+        total: finalTotal,
+        payment_method: payment,
+        shipping_address: { zip, street, number, complement, neighborhood, city, state },
+      });
+
+      clearCart();
+      setSubmitted(true);
+    } catch {
+      toast.error('Erro ao processar pedido. Tente novamente.');
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -76,13 +135,12 @@ const Checkout = () => {
             <section className="bg-card rounded-sm shadow-soft p-6 space-y-4">
               <h2 className="font-display text-lg font-semibold text-foreground">Dados Pessoais</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Input placeholder="Nome completo" className="font-body" />
-                <Input placeholder="E-mail" type="email" className="font-body" />
-                <Input placeholder="Telefone / WhatsApp" className="font-body" />
-                <Input placeholder="CPF" className="font-body" />
+                <Input placeholder="Nome completo *" value={name} onChange={e => setName(e.target.value)} className="font-body" />
+                <Input placeholder="E-mail *" type="email" value={email} onChange={e => setEmail(e.target.value)} className="font-body" />
+                <Input placeholder="Telefone / WhatsApp *" value={phone} onChange={e => setPhone(e.target.value)} className="font-body" />
+                <Input placeholder="CPF *" value={cpf} onChange={e => setCpf(e.target.value)} className="font-body" />
               </div>
 
-              {/* Wholesale toggle */}
               <button
                 onClick={() => setIsWholesale(!isWholesale)}
                 className={`flex items-center gap-2 text-sm font-body transition-colors ${isWholesale ? 'text-primary font-semibold' : 'text-muted-foreground'}`}
@@ -95,8 +153,8 @@ const Checkout = () => {
 
               {isWholesale && (
                 <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Input placeholder="CNPJ" className="font-body" />
-                  <Input placeholder="Razão Social" className="font-body" />
+                  <Input placeholder="CNPJ" value={cnpj} onChange={e => setCnpj(e.target.value)} className="font-body" />
+                  <Input placeholder="Razão Social" value={companyName} onChange={e => setCompanyName(e.target.value)} className="font-body" />
                 </motion.div>
               )}
             </section>
@@ -105,13 +163,13 @@ const Checkout = () => {
             <section className="bg-card rounded-sm shadow-soft p-6 space-y-4">
               <h2 className="font-display text-lg font-semibold text-foreground">Endereço de Entrega</h2>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Input placeholder="CEP" className="font-body md:col-span-1" />
-                <Input placeholder="Rua / Avenida" className="font-body md:col-span-2" />
-                <Input placeholder="Número" className="font-body" />
-                <Input placeholder="Complemento" className="font-body" />
-                <Input placeholder="Bairro" className="font-body" />
-                <Input placeholder="Cidade" className="font-body md:col-span-2" />
-                <Input placeholder="Estado" className="font-body" />
+                <Input placeholder="CEP *" value={zip} onChange={e => setZip(e.target.value)} className="font-body md:col-span-1" />
+                <Input placeholder="Rua / Avenida *" value={street} onChange={e => setStreet(e.target.value)} className="font-body md:col-span-2" />
+                <Input placeholder="Número *" value={number} onChange={e => setNumber(e.target.value)} className="font-body" />
+                <Input placeholder="Complemento" value={complement} onChange={e => setComplement(e.target.value)} className="font-body" />
+                <Input placeholder="Bairro" value={neighborhood} onChange={e => setNeighborhood(e.target.value)} className="font-body" />
+                <Input placeholder="Cidade *" value={city} onChange={e => setCity(e.target.value)} className="font-body md:col-span-2" />
+                <Input placeholder="Estado *" value={state} onChange={e => setState(e.target.value)} className="font-body" />
               </div>
             </section>
 
@@ -156,12 +214,11 @@ const Checkout = () => {
             <div className="bg-card rounded-sm shadow-soft p-6 space-y-4 sticky top-28">
               <h2 className="font-display text-lg font-semibold text-foreground">Resumo</h2>
 
-              {/* Items */}
               <div className="space-y-3 max-h-60 overflow-y-auto">
                 {items.map(item => {
                   const smart = getSmartPrice(item.product.retailPrice, item.product.box06Price, item.product.box12Price, item.quantity);
                   return (
-                    <div key={item.product.id} className="flex justify-between items-center text-sm font-body">
+                    <div key={`${item.product.id}-${item.selectedColor}`} className="flex justify-between items-center text-sm font-body">
                       <div className="min-w-0">
                         <span className="text-foreground font-medium truncate block">{item.product.name}</span>
                         <span className="text-muted-foreground text-xs">{item.quantity}x {formatCurrency(smart.price)}</span>
@@ -198,15 +255,16 @@ const Checkout = () => {
               <div className="border-t border-border pt-3 flex justify-between font-body">
                 <span className="font-semibold text-foreground">Total</span>
                 <span className="font-display text-xl font-bold text-foreground">
-                  {formatCurrency(payment === 'pix' ? total - pixDiscount : total)}
+                  {formatCurrency(finalTotal)}
                 </span>
               </div>
 
               <button
-                onClick={() => setSubmitted(true)}
-                className="w-full bg-gradient-rose text-primary-foreground font-body font-semibold text-sm tracking-wider uppercase px-6 py-4 rounded-sm hover:opacity-90 transition-opacity shadow-rose"
+                onClick={handleSubmit}
+                disabled={createOrder.isPending}
+                className="w-full bg-gradient-rose text-primary-foreground font-body font-semibold text-sm tracking-wider uppercase px-6 py-4 rounded-sm hover:opacity-90 transition-opacity shadow-rose disabled:opacity-50"
               >
-                Confirmar Pedido
+                {createOrder.isPending ? 'Processando...' : 'Confirmar Pedido'}
               </button>
 
               <div className="flex items-center justify-center gap-2 text-xs font-body text-muted-foreground">
