@@ -6,11 +6,13 @@ import Footer from '@/components/Footer';
 import CartDrawer from '@/components/CartDrawer';
 import ProductCard from '@/components/ProductCard';
 import { useCart } from '@/context/CartContext';
-import { formatCurrency, getSmartPrice, products } from '@/data/products';
+import { formatCurrency, getSmartPrice } from '@/data/products';
+import { useStorefrontProducts } from '@/hooks/useProducts';
 
 const Cart = () => {
   const { items, updateQuantity, removeItem, totalSmart, totalSavings, totalRetail } = useCart();
-  const upsell = products.filter(p => !items.find(i => i.product.id === p.id)).slice(0, 4);
+  const { data: products } = useStorefrontProducts();
+  const upsell = (products ?? []).filter(p => !items.find(i => i.product.id === p.id)).slice(0, 4);
 
   return (
     <div className="min-h-screen bg-background">
@@ -32,7 +34,6 @@ const Cart = () => {
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Items */}
             <div className="lg:col-span-2 space-y-4">
               {items.map(item => {
                 const smart = getSmartPrice(item.product.retailPrice, item.product.box06Price, item.product.box12Price, item.quantity);
@@ -78,11 +79,9 @@ const Cart = () => {
               })}
             </div>
 
-            {/* Summary */}
             <div className="lg:col-span-1">
               <div className="bg-card rounded-sm shadow-soft p-6 space-y-4 sticky top-28">
                 <h2 className="font-display text-lg font-semibold text-foreground">Resumo do Pedido</h2>
-
                 <div className="space-y-2 font-body text-sm">
                   <div className="flex justify-between text-muted-foreground">
                     <span>Subtotal (varejo)</span>
@@ -99,18 +98,15 @@ const Cart = () => {
                     <span>Calculado no checkout</span>
                   </div>
                 </div>
-
                 <div className="border-t border-border pt-4 flex justify-between font-body">
                   <span className="font-semibold text-foreground">Total</span>
                   <span className="font-display text-xl font-bold text-foreground">{formatCurrency(totalSmart)}</span>
                 </div>
-
                 {totalSavings > 0 && (
                   <div className="bg-primary/10 text-primary rounded-sm px-3 py-2 text-sm font-body font-medium text-center">
                     🎉 Economia total: {formatCurrency(totalSavings)}
                   </div>
                 )}
-
                 <Link to="/checkout" className="block w-full text-center bg-gradient-rose text-primary-foreground font-body font-semibold text-sm tracking-wider uppercase px-6 py-4 rounded-sm hover:opacity-90 transition-opacity shadow-rose">
                   Finalizar Compra
                 </Link>

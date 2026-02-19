@@ -5,7 +5,7 @@ import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import CartDrawer from '@/components/CartDrawer';
 import ProductCard from '@/components/ProductCard';
-import { products, collections } from '@/data/products';
+import { useStorefrontProducts, useCollections } from '@/hooks/useProducts';
 
 const priceRanges = [
   { label: 'Todos', min: 0, max: Infinity },
@@ -20,15 +20,18 @@ const Collections = () => {
   const [activeCollection, setActiveCollection] = useState(filterParam || 'all');
   const [activePriceRange, setActivePriceRange] = useState(0);
 
+  const { data: products, isLoading } = useStorefrontProducts();
+  const { data: collections } = useCollections();
+
   const filtered = useMemo(() => {
-    let list = products;
+    let list = products ?? [];
     if (activeCollection !== 'all') {
-      list = list.filter(p => p.collection === activeCollection);
+      list = list.filter(p => p.collections?.some((c: any) => c.slug === activeCollection));
     }
     const range = priceRanges[activePriceRange];
-    list = list.filter(p => p.retailPrice >= range.min && p.retailPrice < range.max);
+    list = list.filter(p => p.retail_price >= range.min && p.retail_price < range.max);
     return list;
-  }, [activeCollection, activePriceRange]);
+  }, [products, activeCollection, activePriceRange]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -39,7 +42,6 @@ const Collections = () => {
           <p className="font-body text-muted-foreground">Encontre o produto perfeito para você ou para revenda</p>
         </div>
 
-        {/* Filters */}
         <div className="mb-8 space-y-4">
           <div className="flex flex-wrap gap-2 justify-center">
             <button
@@ -48,11 +50,11 @@ const Collections = () => {
             >
               Todos
             </button>
-            {collections.map(c => (
+            {(collections ?? []).map(c => (
               <button
                 key={c.id}
-                onClick={() => setActiveCollection(c.id)}
-                className={`px-4 py-2 rounded-sm text-sm font-body transition-colors ${activeCollection === c.id ? 'bg-primary text-primary-foreground' : 'bg-secondary text-foreground hover:bg-muted'}`}
+                onClick={() => setActiveCollection(c.slug)}
+                className={`px-4 py-2 rounded-sm text-sm font-body transition-colors ${activeCollection === c.slug ? 'bg-primary text-primary-foreground' : 'bg-secondary text-foreground hover:bg-muted'}`}
               >
                 {c.name}
               </button>
@@ -71,8 +73,11 @@ const Collections = () => {
           </div>
         </div>
 
-        {/* Grid */}
-        {filtered.length > 0 ? (
+        {isLoading ? (
+          <div className="text-center py-20">
+            <p className="font-body text-muted-foreground">Carregando...</p>
+          </div>
+        ) : filtered.length > 0 ? (
           <motion.div layout className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-8">
             {filtered.map((product, i) => (
               <ProductCard key={product.id} product={product} index={i} />

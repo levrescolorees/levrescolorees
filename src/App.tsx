@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { CartProvider } from "@/context/CartContext";
+import { AuthProvider } from "@/hooks/useAuth";
 import Index from "./pages/Index";
 import Collections from "./pages/Collections";
 import ProductDetail from "./pages/ProductDetail";
@@ -11,27 +12,51 @@ import Cart from "./pages/Cart";
 import Atacado from "./pages/Atacado";
 import Checkout from "./pages/Checkout";
 import NotFound from "./pages/NotFound";
+import AdminLogin from "./pages/admin/AdminLogin";
+import AdminLayout from "./pages/admin/AdminLayout";
+import Dashboard from "./pages/admin/Dashboard";
+import Products from "./pages/admin/Products";
+import ProductForm from "./pages/admin/ProductForm";
+import Placeholder from "./pages/admin/Placeholder";
 
 const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
-      <CartProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<Index />} />
-            <Route path="/colecoes" element={<Collections />} />
-            <Route path="/produto/:slug" element={<ProductDetail />} />
-            <Route path="/carrinho" element={<Cart />} />
-            <Route path="/atacado" element={<Atacado />} />
-            <Route path="/checkout" element={<Checkout />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
-      </CartProvider>
+      <AuthProvider>
+        <CartProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
+            <Routes>
+              {/* Storefront */}
+              <Route path="/" element={<Index />} />
+              <Route path="/colecoes" element={<Collections />} />
+              <Route path="/produto/:slug" element={<ProductDetail />} />
+              <Route path="/carrinho" element={<Cart />} />
+              <Route path="/atacado" element={<Atacado />} />
+              <Route path="/checkout" element={<Checkout />} />
+
+              {/* Admin */}
+              <Route path="/admin/login" element={<AdminLogin />} />
+              <Route path="/admin" element={<AdminLayout />}>
+                <Route index element={<Dashboard />} />
+                <Route path="produtos" element={<Products />} />
+                <Route path="produtos/:id" element={<ProductForm />} />
+                <Route path="colecoes" element={<Placeholder />} />
+                <Route path="pedidos" element={<Placeholder />} />
+                <Route path="clientes" element={<Placeholder />} />
+                <Route path="cupons" element={<Placeholder />} />
+                <Route path="midia" element={<Placeholder />} />
+                <Route path="configuracoes" element={<Placeholder />} />
+              </Route>
+
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </BrowserRouter>
+        </CartProvider>
+      </AuthProvider>
     </TooltipProvider>
   </QueryClientProvider>
 );
