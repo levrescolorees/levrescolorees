@@ -92,6 +92,68 @@ export type Database = {
         }
         Relationships: []
       }
+      coupons: {
+        Row: {
+          code: string
+          collection_id: string | null
+          created_at: string
+          description: string
+          discount_type: string
+          discount_value: number
+          expires_at: string | null
+          first_purchase_only: boolean
+          id: string
+          is_active: boolean
+          max_uses: number | null
+          min_order_value: number
+          starts_at: string
+          updated_at: string
+          used_count: number
+        }
+        Insert: {
+          code: string
+          collection_id?: string | null
+          created_at?: string
+          description?: string
+          discount_type?: string
+          discount_value?: number
+          expires_at?: string | null
+          first_purchase_only?: boolean
+          id?: string
+          is_active?: boolean
+          max_uses?: number | null
+          min_order_value?: number
+          starts_at?: string
+          updated_at?: string
+          used_count?: number
+        }
+        Update: {
+          code?: string
+          collection_id?: string | null
+          created_at?: string
+          description?: string
+          discount_type?: string
+          discount_value?: number
+          expires_at?: string | null
+          first_purchase_only?: boolean
+          id?: string
+          is_active?: boolean
+          max_uses?: number | null
+          min_order_value?: number
+          starts_at?: string
+          updated_at?: string
+          used_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coupons_collection_id_fkey"
+            columns: ["collection_id"]
+            isOneToOne: false
+            referencedRelation: "collections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       customers: {
         Row: {
           cnpj: string | null
@@ -455,6 +517,63 @@ export type Database = {
           name?: string
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      shipping_rules: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          min_order_for_free: number | null
+          name: string
+          rule_type: string
+          sort_order: number
+          state: string | null
+          value: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          min_order_for_free?: number | null
+          name?: string
+          rule_type?: string
+          sort_order?: number
+          state?: string | null
+          value?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          min_order_for_free?: number | null
+          name?: string
+          rule_type?: string
+          sort_order?: number
+          state?: string | null
+          value?: number
+        }
+        Relationships: []
+      }
+      store_settings: {
+        Row: {
+          id: string
+          key: string
+          updated_at: string
+          value: Json
+        }
+        Insert: {
+          id?: string
+          key: string
+          updated_at?: string
+          value?: Json
+        }
+        Update: {
+          id?: string
+          key?: string
+          updated_at?: string
+          value?: Json
         }
         Relationships: []
       }
