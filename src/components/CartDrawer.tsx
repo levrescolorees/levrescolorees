@@ -7,6 +7,20 @@ import { formatCurrency, getSmartPrice } from '@/data/products';
 const CartDrawer = () => {
   const { items, isCartOpen, setIsCartOpen, updateQuantity, removeItem, totalSmart, totalSavings, totalItems } = useCart();
 
+  // Calculate progress toward next tier
+  const getProgressInfo = () => {
+    const totalQty = items.reduce((sum, i) => sum + i.quantity, 0);
+    if (totalQty >= 12) return { message: '🎉 Preço Box 12 desbloqueado!', progress: 100, unlocked: true };
+    if (totalQty >= 6) {
+      const remaining = 12 - totalQty;
+      return { message: `Faltam ${remaining} un. para desbloquear preço Box 12`, progress: (totalQty / 12) * 100, unlocked: false };
+    }
+    const remaining = 6 - totalQty;
+    return { message: `Faltam ${remaining} un. para desbloquear preço Box 06`, progress: (totalQty / 6) * 100, unlocked: false };
+  };
+
+  const progressInfo = items.length > 0 ? getProgressInfo() : null;
+
   return (
     <AnimatePresence>
       {isCartOpen && (
@@ -32,6 +46,23 @@ const CartDrawer = () => {
                 <X className="w-5 h-5" />
               </button>
             </div>
+
+            {/* Progress bar */}
+            {progressInfo && (
+              <div className="px-4 pt-3 pb-1">
+                <div className="bg-secondary rounded-full h-2 overflow-hidden">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${progressInfo.progress}%` }}
+                    transition={{ duration: 0.5, ease: 'easeOut' }}
+                    className="h-full bg-gradient-rose rounded-full"
+                  />
+                </div>
+                <p className={`text-xs font-body mt-1.5 text-center ${progressInfo.unlocked ? 'text-primary font-semibold' : 'text-muted-foreground'}`}>
+                  {progressInfo.message}
+                </p>
+              </div>
+            )}
 
             {/* Items */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -96,13 +127,13 @@ const CartDrawer = () => {
                   <span className="font-semibold text-foreground">{formatCurrency(totalSmart)}</span>
                 </div>
                 <Link
-                  to="/carrinho"
+                  to="/checkout"
                   onClick={() => setIsCartOpen(false)}
                   className="block w-full text-center bg-gradient-rose text-primary-foreground font-body font-semibold text-sm tracking-wider uppercase px-6 py-4 rounded-sm hover:opacity-90 transition-opacity shadow-rose"
                 >
                   Finalizar Compra
                 </Link>
-                <p className="text-xs font-body text-muted-foreground text-center">Frete calculado no checkout</p>
+                <p className="text-xs font-body text-muted-foreground text-center">Pix com 5% off • Frete grátis acima de R$299</p>
               </div>
             )}
           </motion.div>

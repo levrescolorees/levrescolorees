@@ -207,9 +207,12 @@ const ProductDetail = () => {
           </motion.div>
         </div>
 
-        {/* Related */}
+        {/* Cross-sell */}
         <section className="mt-16 md:mt-24">
-          <h2 className="font-display text-2xl font-semibold text-foreground mb-8 text-center">Você também pode gostar</h2>
+          <div className="text-center mb-8">
+            <span className="text-sm font-body tracking-[0.3em] uppercase text-primary mb-2 block">Combine</span>
+            <h2 className="font-display text-2xl font-semibold text-foreground">Quem compra este produto também leva</h2>
+          </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-8">
             {related.map((p, i) => <ProductCard key={p.id} product={p} index={i} />)}
           </div>
