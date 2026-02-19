@@ -1,211 +1,223 @@
 
+# Editor de Produto Enterprise (Shopify-style)
 
-# Plano de Implementacao - Admin Shopify-Like para Levres Colorees
-
-Este e um projeto grande. Para garantir qualidade e estabilidade, vamos dividir em **4 fases** incrementais. Cada fase entrega valor funcional e pode ser testada antes de avancar.
-
----
-
-## Estado Atual
-
-Hoje o projeto e 100% frontend com dados hardcoded em `src/data/products.ts`. Nao ha banco de dados, autenticacao nem painel admin. Precisamos construir toda a infraestrutura backend.
+Transformacao completa do formulario de produto atual em um editor enterprise com layout 2 colunas, autosave, workflow de publicacao, midia drag-and-drop, preview e sidebar.
 
 ---
 
-## Fase 1 - Fundacao (Backend + Auth + Produtos no DB)
+## Etapa 1 -- Migracao no Banco de Dados
 
-**Objetivo**: Conectar Lovable Cloud, criar banco de dados, autenticacao admin e CRUD de produtos.
+Adicionar 4 colunas na tabela `products`:
 
-### Backend (Lovable Cloud / Supabase)
+- `status` TEXT NOT NULL DEFAULT 'draft'
+- `published_at` TIMESTAMPTZ (nullable)
+- `seo_title` TEXT NOT NULL DEFAULT ''
+- `meta_description` TEXT NOT NULL DEFAULT ''
 
-- Ativar Lovable Cloud no projeto
-- Criar tabelas no banco:
-  - `products` (nome, slug, sku, descricao curta/longa, preco varejo, imagens, rating, reviews, ativo, estoque, badges, ideal_revenda, margem_sugerida)
-  - `product_variants` (product_id, cor/modelo, sku, preco_override, estoque, imagens)
-  - `price_rules` (product_id, min_quantity, price, label, ativo)
-  - `collections` (nome, slug, descricao, imagem, tipo: manual/automatica, ordem, condicoes)
-  - `collection_products` (collection_id, product_id, ordem)
-  - `user_roles` (user_id, role enum: admin/operador/financeiro)
-  - `profiles` (user_id, nome, email)
-- RLS policies com funcao `has_role()` para proteger acesso
-- Seed data com os 6 produtos existentes migrados para o banco
+Migrar dados existentes: produtos com `is_active = true` recebem `status = 'published'` e `published_at = now()`. Produtos inativos recebem `status = 'draft'`.
 
-### Autenticacao
-
-- Pagina `/admin/login` com email/senha
-- Protecao de rotas `/admin/*` via auth guard
-- RBAC: admin, operador, financeiro
-
-### Admin - Layout Base
-
-- Sidebar com navegacao (Dashboard, Produtos, Colecoes, Pedidos, Clientes, Cupons, Configuracoes, Midia)
-- Header com nome do usuario e logout
-- Rota `/admin` com layout protegido
-
-### Admin - CRUD Produtos
-
-- Listagem com busca, filtros (colecao, status), paginacao
-- Formulario criar/editar produto com todos os campos
-- Upload de imagens via Supabase Storage
-- Gerenciamento de variantes (cor, modelo) com estoque individual
-- Regras de preco por quantidade (editavel por produto)
-- Ativar/desativar produto
-
-### Storefront Adaptado
-
-- Migrar storefront para buscar dados do banco (react-query)
-- Manter toda a UX premium existente
-- Precos dinamicos vindo das `price_rules` do banco
+A coluna `images` (text[]) e `product_variants.images` (text[]) ja existem no schema -- nao precisam ser criadas.
 
 ---
 
-## Fase 2 - Colecoes, Pedidos e Carrinho Persistente
+## Etapa 2 -- Arquitetura de Componentes
 
-### Admin - CRUD Colecoes
-
-- Criar/editar colecoes manuais (selecionar produtos) e automaticas (por tags/condicoes)
-- Upload de imagem da colecao
-- Ordenacao drag-and-drop
-
-### Sistema de Pedidos
-
-- Tabelas: `orders`, `order_items`, `order_status_history`
-- Checkout grava pedido no banco com status "pendente"
-- Admin: listagem de pedidos com filtros por status
-- Detalhe do pedido: itens, precos aplicados, dados do cliente, endereco
-- Acoes: atualizar status, inserir rastreio
-- Exportar pedidos CSV
-
-### Clientes
-
-- Tabela `customers` (nome, email, cpf/cnpj, telefone, tag revendedor)
-- Admin: listagem com historico de compras
-- Marcar como revendedor
-
----
-
-## Fase 3 - Cupons, Frete, Theme Editor
-
-### Cupons e Promocoes
-
-- Tabela `coupons` (codigo, tipo percentual/fixo, validade, minimo compra, colecao especifica, primeira compra, limite uso)
-- Admin: CRUD de cupons
-- Storefront: campo de cupom no carrinho/checkout
-
-### Frete
-
-- Tabela `shipping_rules` (tipo: fixo/por estado/frete gratis acima de X)
-- Admin: configurar regras
-- Checkout: calculo automatico
-
-### Theme Editor (Configuracoes da Loja)
-
-- Tabela `store_settings` (chave/valor JSON)
-- Admin: editor visual para:
-  - Logo, favicon, nome da marca
-  - Cores primaria/secundaria
-  - Conteudo da home (headline, subheadline, banners, beneficios, CTA)
-  - Menu/navegacao
-  - Rodape
-  - Textos legais (politicas, FAQ)
-- Storefront: carregar configuracoes do banco dinamicamente
-
----
-
-## Fase 4 - Dashboard, Midia, Import/Export, Polish
-
-### Dashboard Admin
-
-- Metricas: pedidos (hoje/semana/mes), ticket medio, faturamento
-- Produtos mais vendidos (grafico)
-- Alertas de estoque baixo
-- Pedidos pendentes
-
-### Biblioteca de Midia
-
-- Upload centralizado com Supabase Storage
-- Organizacao por tags
-- Reaproveitamento em produtos e home
-
-### Import/Export
-
-- Importar produtos via CSV
-- Exportar produtos/pedidos/clientes
-
-### Pagamentos (modo simulado)
-
-- Tabela `payment_methods` configuravel
-- Modo simulado para Pix/Cartao/Boleto
-- Preparado para integracao com gateway real
-
----
-
-## Detalhes Tecnicos
-
-### Estrutura de Pastas (nova)
+Criar 11 componentes modulares e reescrever o orquestrador:
 
 ```text
-src/
-  pages/
-    admin/
-      AdminLogin.tsx
-      AdminLayout.tsx
-      Dashboard.tsx
-      Products.tsx
-      ProductForm.tsx
-      Collections.tsx
-      Orders.tsx
-      OrderDetail.tsx
-      Customers.tsx
-      Coupons.tsx
-      Settings.tsx
-      Media.tsx
-  components/
-    admin/
-      AdminSidebar.tsx
-      AdminHeader.tsx
-      ProductTable.tsx
-      OrderTable.tsx
-      ...
-  hooks/
-    useProducts.ts
-    useCollections.ts
-    useOrders.ts
-    ...
+src/pages/admin/ProductForm.tsx              -- orquestrador (state central, layout 2 colunas)
+src/components/admin/product-editor/
+  TopBar.tsx                                  -- barra sticky com breadcrumb, status, acoes
+  BasicInfoCard.tsx                           -- nome, slug, SKU, badge, descricoes
+  MediaCard.tsx                               -- upload, drag-drop, reorder, preview miniaturas
+  PricingCard.tsx                             -- preco, estoque, rating, reviews
+  VariantsCard.tsx                            -- variantes com price_override, imagens, estoque
+  PriceRulesCard.tsx                          -- regras de preco + simulador lateral
+  SidebarStatus.tsx                           -- status draft/published, botoes, published_at
+  SidebarCollections.tsx                      -- multi-select com busca nas colecoes
+  SidebarSEO.tsx                              -- SEO title, meta description, preview Google
+  SidebarStock.tsx                            -- resumo estoque, alerta, revenda toggle
+  ProductPreviewDrawer.tsx                    -- drawer com PDP preview completa
 ```
 
-### Banco de Dados (principais tabelas)
+Criar hook auxiliar:
 
 ```text
-profiles          -> user_id, nome, email
-user_roles        -> user_id, role (admin/operador/financeiro)
-products          -> id, nome, slug, sku, descricoes, precos, estoque, ativo, badges
-product_variants  -> id, product_id, nome, sku, preco, estoque, imagens
-price_rules       -> id, product_id, min_qty, price, label, ativo
-collections       -> id, nome, slug, tipo, condicoes, imagem, ordem
-collection_products -> collection_id, product_id, ordem
-orders            -> id, customer_id, status, total, frete, pagamento, rastreio
-order_items       -> id, order_id, product_id, variant_id, qty, preco_unitario
-customers         -> id, nome, email, cpf_cnpj, telefone, is_revendedor
-coupons           -> id, codigo, tipo, valor, validade, min_compra, ativo
-shipping_rules    -> id, tipo, valor, estado, min_frete_gratis
-store_settings    -> id, chave, valor (JSON)
-media             -> id, url, nome, tags, created_at
+src/hooks/useAutosave.ts                     -- debounce 1500ms, isDirty, indicadores
 ```
-
-### Seguranca
-
-- RLS em todas as tabelas
-- Funcao `has_role(user_id, role)` security definer
-- Roles em tabela separada (nunca no profiles)
-- Admin routes protegidas por auth guard no frontend + RLS no backend
-- Confirmacao para acoes destrutivas
 
 ---
 
-## Recomendacao
+## Etapa 3 -- Layout 2 Colunas
 
-Sugiro comecar pela **Fase 1** que ja entrega: banco de dados funcionando, autenticacao admin, CRUD de produtos completo e storefront conectado ao banco. Isso substitui os dados hardcoded e da autonomia real para gerenciar produtos.
+O `ProductForm.tsx` sera reescrito com grid responsivo:
 
-Confirme para iniciar a Fase 1.
+- **Coluna esquerda (~65%)**: TopBar (full-width sticky acima), BasicInfoCard, MediaCard, PricingCard, VariantsCard, PriceRulesCard
+- **Sidebar direita (~35%)**: SidebarStatus, SidebarCollections, SidebarSEO, SidebarStock
 
+Em mobile, a sidebar empilha abaixo da coluna principal.
+
+---
+
+## Etapa 4 -- TopBar Fixa
+
+Componente sticky no topo com:
+
+- Breadcrumb: "Produtos > Nome do produto" ou "Novo Produto"
+- Badge de status: Rascunho (amarelo) / Publicado (verde)
+- Botoes de acao:
+  - **Salvar**: salva e redireciona para lista
+  - **Salvar e continuar**: salva e permanece no editor
+  - **Publicar** (visivel se draft): valida campos minimos, muda status
+  - **Despublicar** (visivel se published): reverte para draft
+  - **Preview**: abre drawer com PDP
+  - **Duplicar** (visivel se editando produto existente)
+- Indicador: "Salvando..." / "Salvo" / "Alteracoes nao salvas"
+- Atalho Ctrl+S capturado globalmente
+
+---
+
+## Etapa 5 -- Autosave
+
+Hook `useAutosave`:
+
+- Debounce de 1500ms apos qualquer mudanca
+- Rastreia `isDirty` comparando estado atual vs ultimo salvo (JSON stringify)
+- So ativa apos primeiro save manual (produto tem ID)
+- Cleanup ao desmontar componente
+- Retorna estado: 'idle' | 'saving' | 'saved' | 'unsaved'
+- `beforeunload` event para prevenir navegacao acidental quando dirty
+
+---
+
+## Etapa 6 -- Workflow Draft/Published
+
+- Campo `status` no form state
+- **Publicar** exige validacao:
+  - `name` preenchido
+  - `slug` preenchido
+  - `retail_price > 0`
+  - Pelo menos 1 imagem em `images`
+- Ao publicar: `status='published'`, `published_at=now()`, `is_active=true`
+- Ao despublicar: `status='draft'`, `is_active=false`
+- Storefront continua filtrando `is_active = true` -- zero mudancas na loja
+
+---
+
+## Etapa 7 -- MediaCard (Fotos Shopify-like)
+
+- Upload multiplo via `<input type="file" multiple accept="image/*">`
+- Area de drag-and-drop visual
+- Upload para bucket `product-images` com path `{product_id}/{timestamp}_{filename}`
+- Para novos produtos (sem ID): upload com path temporario `temp/{sessionId}/...`, URLs salvas no state; apos primeiro save, as URLs ja apontam para o storage e sao persistidas
+- Grid de miniaturas com:
+  - Primeira imagem destacada como "principal"
+  - Reordenacao via drag (usando state + botoes mover, sem lib extra para manter bundle leve)
+  - Botao remover com confirmacao (AlertDialog)
+- Persistir ordem no array `products.images`
+
+---
+
+## Etapa 8 -- ProductPreviewDrawer
+
+- Drawer lateral (vaul) aberto pelo botao Preview
+- Renderiza a PDP usando dados atuais do form (sem precisar salvar)
+- Mostra: galeria de imagens, preco, variantes, tabela de precos
+- Simulador de quantidade (1, 6, 12) integrado
+- Funciona com produto em draft
+
+---
+
+## Etapa 9 -- Sidebar Direita
+
+**SidebarStatus**:
+- Card com status atual (badge colorido)
+- Botoes publicar/despublicar
+- Data de publicacao se published
+
+**SidebarCollections**:
+- Busca colecoes existentes via query
+- Checkboxes multi-select
+- Salva relacoes em `collection_products` (delete + insert ao salvar)
+
+**SidebarSEO**:
+- Campos: SEO Title, Meta Description, Slug editavel
+- Preview snippet estilo Google:
+  - Titulo em azul
+  - URL ficticia (dominio + slug)
+  - Meta description em cinza
+
+**SidebarStock**:
+- Resumo do estoque total (soma variantes se existirem, senao usa stock do produto)
+- Alerta visual "estoque baixo" se < 5 unidades
+- Toggle "Ideal para revenda" + campo margem sugerida
+
+---
+
+## Etapa 10 -- VariantsCard Evoluido
+
+Cada variante com campos:
+- Nome/label (cor, modelo)
+- SKU
+- Estoque
+- Price override (opcional, campo numerico)
+- Imagens por variante (opcional, upload simplificado)
+- Botao remover com confirmacao
+- Salva em `product_variants` (delete + re-insert, como ja funciona)
+
+---
+
+## Etapa 11 -- PriceRulesCard com Simulador
+
+Tabela editavel:
+- Colunas: Qtd Min | Preco Unitario | Label | Ativo (switch)
+- Botao "Adicionar regra"
+
+Simulador lateral (tempo real):
+- Mostra calculo para qty 1, 6, 12
+- Exibe preco unitario, total e economia vs varejo
+- Recalcula conforme editar regras ou preco varejo
+
+---
+
+## Etapa 12 -- Duplicar Produto
+
+Botao "Duplicar" na TopBar:
+1. Clona dados do produto (novo ID, `status='draft'`, `is_active=false`, `published_at=null`)
+2. Gera slug `{slug}-copia` (com sufixo incremental se necessario)
+3. Insere produto clonado
+4. Clona `product_variants` e `price_rules` com novo `product_id`
+5. Clona relacoes `collection_products`
+6. Redireciona para o editor do clone
+7. Toast de sucesso
+
+---
+
+## Etapa 13 -- Qualidade Enterprise
+
+- Validacao inline por campo (borda vermelha + mensagem)
+- Toasts via `sonner` para sucesso/erro em todas as acoes
+- Confirmacao AlertDialog para acoes destrutivas (remover variante, remover imagem, despublicar, duplicar)
+- `beforeunload` para prevenir navegacao com alteracoes nao salvas
+- Estados de loading em todos os botoes
+- Labels e focus corretos para acessibilidade
+
+---
+
+## Etapa 14 -- Atualizar DBProduct e useProducts
+
+- Adicionar campos `status`, `published_at`, `seo_title`, `meta_description` na interface `DBProduct`
+- Carregar e mapear esses campos no form ao editar produto existente
+
+---
+
+## Secao Tecnica: Ordem de Execucao
+
+1. Migracao SQL (status, published_at, seo_title, meta_description)
+2. Atualizar `DBProduct` interface no `useProducts.ts`
+3. Criar `useAutosave.ts` hook
+4. Criar todos os 11 componentes do editor
+5. Reescrever `ProductForm.tsx` como orquestrador
+6. Testar fluxos: novo produto, editar, publicar, duplicar, preview
+
+Nenhuma mudanca no storefront -- compatibilidade total via `is_active`.
