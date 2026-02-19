@@ -1,13 +1,15 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, ShieldCheck, CreditCard, QrCode, FileText, Check } from 'lucide-react';
+import { ArrowLeft, ShieldCheck, CreditCard, QrCode, FileText, Check, Tag } from 'lucide-react';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import { useCart } from '@/context/CartContext';
 import { getSmartPrice, formatCurrency } from '@/data/products';
 import { useCreateOrder } from '@/hooks/useOrders';
+import { supabase } from '@/integrations/supabase/client';
 import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 
 type PaymentMethod = 'pix' | 'cartao' | 'boleto';
@@ -33,6 +35,35 @@ const Checkout = () => {
   const [neighborhood, setNeighborhood] = useState('');
   const [city, setCity] = useState('');
   const [state, setState] = useState('');
+
+  // Coupon state
+  const [couponCode, setCouponCode] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; discount_type: string; discount_value: number } | null>(null);
+  const [couponLoading, setCouponLoading] = useState(false);
+
+  const applyCoupon = async () => {
+    if (!couponCode.trim()) return;
+    setCouponLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('coupons')
+        .select('*')
+        .eq('code', couponCode.toUpperCase().trim())
+        .eq('is_active', true)
+        .single();
+      if (error || !data) { toast.error('Cupom inválido ou expirado.'); setAppliedCoupon(null); return; }
+      if (data.expires_at && new Date(data.expires_at) < new Date()) { toast.error('Cupom expirado.'); return; }
+      if (data.max_uses && data.used_count >= data.max_uses) { toast.error('Cupom esgotado.'); return; }
+      if (data.min_order_value > 0 && totalSmart < data.min_order_value) {
+        toast.error(`Pedido mínimo de R$ ${data.min_order_value.toFixed(2)} para este cupom.`);
+        return;
+      }
+      setAppliedCoupon({ code: data.code, discount_type: data.discount_type, discount_value: data.discount_value });
+      toast.success(`Cupom "${data.code}" aplicado!`);
+    } finally {
+      setCouponLoading(false);
+    }
+  };
 
   if (submitted) {
     return (
@@ -74,9 +105,14 @@ const Checkout = () => {
   }
 
   const shipping = totalSmart >= 299 ? 0 : 19.90;
-  const total = totalSmart + shipping;
-  const pixDiscount = payment === 'pix' ? total * 0.05 : 0;
-  const finalTotal = total - pixDiscount;
+  const couponDiscount = appliedCoupon
+    ? appliedCoupon.discount_type === 'percentage'
+      ? totalSmart * (appliedCoupon.discount_value / 100)
+      : appliedCoupon.discount_value
+    : 0;
+  const afterCoupon = totalSmart - couponDiscount + shipping;
+  const pixDiscount = payment === 'pix' ? afterCoupon * 0.05 : 0;
+  const finalTotal = afterCoupon - pixDiscount;
 
   const handleSubmit = async () => {
     if (!name || !email || !phone || !cpf || !street || !number || !city || !state || !zip) {
@@ -105,7 +141,7 @@ const Checkout = () => {
         }),
         subtotal: totalSmart,
         shipping,
-        discount: pixDiscount,
+        discount: couponDiscount + pixDiscount,
         total: finalTotal,
         payment_method: payment,
         shipping_address: { zip, street, number, complement, neighborhood, city, state },
@@ -229,6 +265,25 @@ const Checkout = () => {
                 })}
               </div>
 
+              {/* Coupon Field */}
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Tag className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Cupom de desconto"
+                    value={couponCode}
+                    onChange={e => setCouponCode(e.target.value)}
+                    className="pl-9 font-body uppercase"
+                    disabled={!!appliedCoupon}
+                  />
+                </div>
+                {appliedCoupon ? (
+                  <Button variant="outline" onClick={() => { setAppliedCoupon(null); setCouponCode(''); }} className="font-body text-xs">Remover</Button>
+                ) : (
+                  <Button variant="outline" onClick={applyCoupon} disabled={couponLoading} className="font-body text-xs">Aplicar</Button>
+                )}
+              </div>
+
               <div className="border-t border-border pt-3 space-y-2 font-body text-sm">
                 <div className="flex justify-between text-muted-foreground">
                   <span>Subtotal</span>
@@ -238,6 +293,12 @@ const Checkout = () => {
                   <div className="flex justify-between text-primary font-medium">
                     <span>Economia</span>
                     <span>-{formatCurrency(totalSavings)}</span>
+                  </div>
+                )}
+                {appliedCoupon && couponDiscount > 0 && (
+                  <div className="flex justify-between text-primary font-medium">
+                    <span>Cupom ({appliedCoupon.code})</span>
+                    <span>-{formatCurrency(couponDiscount)}</span>
                   </div>
                 )}
                 <div className="flex justify-between text-muted-foreground">
