@@ -17,6 +17,10 @@ export interface DBProduct {
   badge: string | null;
   ideal_for_resale: boolean;
   suggested_margin: number;
+  status: string;
+  published_at: string | null;
+  seo_title: string;
+  meta_description: string;
   created_at: string;
   updated_at: string;
 }

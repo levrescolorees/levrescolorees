@@ -442,13 +442,17 @@ export type Database = {
           ideal_for_resale: boolean
           images: string[]
           is_active: boolean
+          meta_description: string
           name: string
+          published_at: string | null
           rating: number
           retail_price: number
           reviews_count: number
+          seo_title: string
           short_description: string
           sku: string | null
           slug: string
+          status: string
           stock: number
           suggested_margin: number
           updated_at: string
@@ -461,13 +465,17 @@ export type Database = {
           ideal_for_resale?: boolean
           images?: string[]
           is_active?: boolean
+          meta_description?: string
           name: string
+          published_at?: string | null
           rating?: number
           retail_price?: number
           reviews_count?: number
+          seo_title?: string
           short_description?: string
           sku?: string | null
           slug: string
+          status?: string
           stock?: number
           suggested_margin?: number
           updated_at?: string
@@ -480,13 +488,17 @@ export type Database = {
           ideal_for_resale?: boolean
           images?: string[]
           is_active?: boolean
+          meta_description?: string
           name?: string
+          published_at?: string | null
           rating?: number
           retail_price?: number
           reviews_count?: number
+          seo_title?: string
           short_description?: string
           sku?: string | null
           slug?: string
+          status?: string
           stock?: number
           suggested_margin?: number
           updated_at?: string
