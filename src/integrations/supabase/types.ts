@@ -300,7 +300,10 @@ export type Database = {
           id: string
           notes: string | null
           order_number: number
+          payment_details: Json | null
+          payment_id: string | null
           payment_method: string
+          payment_status: string
           shipping: number
           shipping_address: Json | null
           status: Database["public"]["Enums"]["order_status"]
@@ -316,7 +319,10 @@ export type Database = {
           id?: string
           notes?: string | null
           order_number?: number
+          payment_details?: Json | null
+          payment_id?: string | null
           payment_method?: string
+          payment_status?: string
           shipping?: number
           shipping_address?: Json | null
           status?: Database["public"]["Enums"]["order_status"]
@@ -332,7 +338,10 @@ export type Database = {
           id?: string
           notes?: string | null
           order_number?: number
+          payment_details?: Json | null
+          payment_id?: string | null
           payment_method?: string
+          payment_status?: string
           shipping?: number
           shipping_address?: Json | null
           status?: Database["public"]["Enums"]["order_status"]
