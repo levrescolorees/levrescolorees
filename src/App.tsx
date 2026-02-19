@@ -17,6 +17,10 @@ import AdminLayout from "./pages/admin/AdminLayout";
 import Dashboard from "./pages/admin/Dashboard";
 import Products from "./pages/admin/Products";
 import ProductForm from "./pages/admin/ProductForm";
+import AdminCollections from "./pages/admin/AdminCollections";
+import AdminOrders from "./pages/admin/AdminOrders";
+import OrderDetail from "./pages/admin/OrderDetail";
+import AdminCustomers from "./pages/admin/AdminCustomers";
 import Placeholder from "./pages/admin/Placeholder";
 
 const queryClient = new QueryClient();
@@ -44,9 +48,10 @@ const App = () => (
                 <Route index element={<Dashboard />} />
                 <Route path="produtos" element={<Products />} />
                 <Route path="produtos/:id" element={<ProductForm />} />
-                <Route path="colecoes" element={<Placeholder />} />
-                <Route path="pedidos" element={<Placeholder />} />
-                <Route path="clientes" element={<Placeholder />} />
+                <Route path="colecoes" element={<AdminCollections />} />
+                <Route path="pedidos" element={<AdminOrders />} />
+                <Route path="pedidos/:id" element={<OrderDetail />} />
+                <Route path="clientes" element={<AdminCustomers />} />
                 <Route path="cupons" element={<Placeholder />} />
                 <Route path="midia" element={<Placeholder />} />
                 <Route path="configuracoes" element={<Placeholder />} />

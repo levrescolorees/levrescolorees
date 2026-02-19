@@ -1,15 +1,17 @@
 import { Package, FolderOpen, ShoppingCart, TrendingUp } from 'lucide-react';
 import { useAdminProducts, useCollections } from '@/hooks/useProducts';
+import { useAdminOrders } from '@/hooks/useOrders';
 
 const Dashboard = () => {
   const { data: products } = useAdminProducts();
   const { data: collections } = useCollections();
+  const { data: orders } = useAdminOrders();
 
   const stats = [
     { label: 'Produtos', value: products?.length ?? 0, icon: Package, color: 'text-primary' },
     { label: 'Ativos', value: products?.filter(p => p.is_active).length ?? 0, icon: TrendingUp, color: 'text-accent' },
     { label: 'Coleções', value: collections?.length ?? 0, icon: FolderOpen, color: 'text-primary' },
-    { label: 'Pedidos', value: 0, icon: ShoppingCart, color: 'text-muted-foreground' },
+    { label: 'Pedidos', value: orders?.length ?? 0, icon: ShoppingCart, color: 'text-muted-foreground' },
   ];
 
   return (
@@ -27,10 +29,11 @@ const Dashboard = () => {
         ))}
       </div>
       <div className="bg-card rounded-lg p-6 shadow-soft">
-        <h2 className="font-body text-sm font-semibold text-foreground mb-2">Próximos Passos</h2>
+        <h2 className="font-body text-sm font-semibold text-foreground mb-2">Resumo</h2>
         <ul className="font-body text-sm text-muted-foreground space-y-1 list-disc list-inside">
           <li>Gerencie seus produtos na aba Produtos</li>
-          <li>Sistema de pedidos será implementado na Fase 2</li>
+          <li>Coleções: criar, editar e organizar</li>
+          <li>Pedidos: acompanhe status e rastreio</li>
           <li>Cupons e frete na Fase 3</li>
         </ul>
       </div>
