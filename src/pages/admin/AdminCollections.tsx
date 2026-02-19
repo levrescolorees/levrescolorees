@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Plus, Pencil, Trash2, Search, ToggleLeft, ToggleRight } from 'lucide-react';
+import { useState, useRef } from 'react';
+import { Plus, Pencil, Trash2, Search, ToggleLeft, ToggleRight, Upload, X, ImageIcon } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Input } from '@/components/ui/input';
@@ -51,6 +51,33 @@ const AdminCollections = () => {
   const [editing, setEditing] = useState<string | null>(null);
   const [form, setForm] = useState<CollectionForm>(emptyForm);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImageUpload = async (file: File) => {
+    setUploading(true);
+    try {
+      const ext = file.name.split('.').pop();
+      const path = `collections/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from('product-images')
+        .upload(path, file, { upsert: true });
+      if (uploadError) throw uploadError;
+      const { data: urlData } = supabase.storage
+        .from('product-images')
+        .getPublicUrl(path);
+      setForm(f => ({ ...f, image: urlData.publicUrl }));
+      toast.success('Imagem enviada!');
+    } catch {
+      toast.error('Erro ao enviar imagem.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const removeImage = () => {
+    setForm(f => ({ ...f, image: '' }));
+  };
 
   const upsert = useMutation({
     mutationFn: async (data: CollectionForm & { id?: string }) => {
@@ -243,8 +270,50 @@ const AdminCollections = () => {
               </div>
             </div>
             <div>
-              <label className="font-body text-sm font-medium text-foreground">URL da Imagem</label>
-              <Input value={form.image} onChange={e => setForm(f => ({ ...f, image: e.target.value }))} className="font-body mt-1" placeholder="https://..." />
+              <label className="font-body text-sm font-medium text-foreground">Imagem</label>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={e => {
+                  const file = e.target.files?.[0];
+                  if (file) handleImageUpload(file);
+                  e.target.value = '';
+                }}
+              />
+              {form.image ? (
+                <div className="mt-2 relative group w-full">
+                  <img
+                    src={form.image}
+                    alt="Preview"
+                    className="w-full h-32 object-cover rounded-md border border-border"
+                  />
+                  <button
+                    type="button"
+                    onClick={removeImage}
+                    className="absolute top-1.5 right-1.5 bg-destructive text-destructive-foreground rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                  className="mt-2 w-full h-32 border-2 border-dashed border-border rounded-md flex flex-col items-center justify-center gap-2 text-muted-foreground hover:border-primary hover:text-primary transition-colors"
+                >
+                  {uploading ? (
+                    <span className="font-body text-sm">Enviando...</span>
+                  ) : (
+                    <>
+                      <Upload className="w-6 h-6" />
+                      <span className="font-body text-sm">Clique para enviar</span>
+                    </>
+                  )}
+                </button>
+              )}
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
