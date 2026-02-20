@@ -9,7 +9,7 @@ import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import { useCart } from '@/context/CartContext';
 import { getSmartPrice, formatCurrency } from '@/data/products';
-import { useShippingRules } from '@/hooks/useStoreSettings';
+import { useShippingRules, useStoreSettings } from '@/hooks/useStoreSettings';
 import { supabase } from '@/integrations/supabase/client';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -60,6 +60,15 @@ function maskCEP(v: string) {
 const Checkout = () => {
   const { items, totalSmart, totalSavings, clearCart } = useCart();
   const { data: shippingRules } = useShippingRules();
+  const { data: storeSettings } = useStoreSettings();
+
+  // MP config from store_settings
+  const mpConfig = storeSettings?.mercado_pago as any;
+  const mpPublicKey = mpConfig?.public_key || '';
+  const mpCardEnabled = mpConfig?.card_enabled ?? true;
+  const mpPixEnabled = mpConfig?.pix_enabled ?? true;
+  const mpBoletoEnabled = mpConfig?.boleto_enabled ?? true;
+  const mpMaxInstallments = mpConfig?.max_installments || 12;
 
   const [step, setStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
@@ -509,10 +518,10 @@ const Checkout = () => {
                   <h2 className="font-display text-lg font-semibold text-foreground">Pagamento</h2>
                   <div className="grid grid-cols-3 gap-3">
                     {([
-                      { id: 'pix' as const, label: 'Pix', icon: QrCode, extra: '5% off' },
-                      { id: 'card' as const, label: 'Cartão', icon: CreditCard, extra: 'Até 12x' },
-                      { id: 'boleto' as const, label: 'Boleto', icon: FileText, extra: '3 dias úteis' },
-                    ]).map(m => (
+                      { id: 'pix' as const, label: 'Pix', icon: QrCode, extra: '5% off', enabled: mpPixEnabled },
+                      { id: 'card' as const, label: 'Cartão', icon: CreditCard, extra: `Até ${mpMaxInstallments}x`, enabled: mpCardEnabled },
+                      { id: 'boleto' as const, label: 'Boleto', icon: FileText, extra: '3 dias úteis', enabled: mpBoletoEnabled },
+                    ]).filter(m => m.enabled).map(m => (
                       <button key={m.id} onClick={() => set('payment', m.id)}
                         className={`flex flex-col items-center gap-2 p-4 rounded-sm border-2 transition-all ${
                           form.payment === m.id ? 'border-primary bg-primary/5' : 'border-border hover:border-muted-foreground'
@@ -524,28 +533,34 @@ const Checkout = () => {
                     ))}
                   </div>
 
-                  {/* Card fields placeholder (SDK Mercado Pago will be integrated) */}
+                  {/* Card fields - SDK Mercado Pago */}
                   {form.payment === 'card' && (
                     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 p-4 bg-muted/20 rounded-sm border border-border">
-                      <p className="font-body text-xs text-muted-foreground md:col-span-2">
-                        Os campos do cartão serão carregados via SDK do Mercado Pago (tokenização segura).
-                      </p>
-                      <Input placeholder="Número do cartão" className="font-body md:col-span-2" />
-                      <Input placeholder="Nome no cartão" className="font-body" />
+                      {!mpPublicKey ? (
+                        <p className="font-body text-xs text-destructive md:col-span-2">
+                          ⚠️ Public Key do Mercado Pago não configurada. Configure em Admin → Integrações.
+                        </p>
+                      ) : (
+                        <p className="font-body text-xs text-muted-foreground md:col-span-2">
+                          Preencha os dados do cartão para tokenização segura via Mercado Pago.
+                        </p>
+                      )}
+                      <Input placeholder="Número do cartão" id="cardNumber" className="font-body md:col-span-2" />
+                      <Input placeholder="Nome no cartão" id="cardholderName" className="font-body" />
                       <div className="grid grid-cols-2 gap-4">
-                        <Input placeholder="Validade" className="font-body" />
-                        <Input placeholder="CVV" className="font-body" />
+                        <Input placeholder="MM/AA" id="cardExpiration" className="font-body" maxLength={5} />
+                        <Input placeholder="CVV" id="securityCode" className="font-body" maxLength={4} />
                       </div>
                       {/* Installments */}
                       <div className="md:col-span-2 space-y-2">
                         <p className="font-body text-xs font-semibold text-foreground">Parcelas:</p>
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs font-body">
                           <div className="p-2 rounded bg-primary/5 border border-primary text-primary font-medium">1x de {formatCurrency(finalTotal)} s/ juros</div>
-                          {[2, 3, 4, 5, 6].map(n => {
+                          {Array.from({ length: Math.min(5, mpMaxInstallments - 1) }, (_, i) => i + 2).map(n => {
                             const t = finalTotal * (1 + 0.0299 * n);
                             return <div key={n} className="p-2 rounded bg-muted/30 border border-border text-muted-foreground">{n}x de {formatCurrency(t / n)}</div>;
                           })}
-                          {[7, 8, 9, 10, 11, 12].map(n => {
+                          {Array.from({ length: Math.max(0, Math.min(6, mpMaxInstallments - 6)) }, (_, i) => i + 7).map(n => {
                             const t = finalTotal * (1 + 0.0349 * n);
                             return <div key={n} className="p-2 rounded bg-muted/30 border border-border text-muted-foreground">{n}x de {formatCurrency(t / n)}</div>;
                           })}
