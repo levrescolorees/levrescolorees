@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, Package, FolderOpen, ShoppingCart,
-  Users, Tag, Settings, Image, LogOut
+  Users, Tag, Settings, Image, LogOut, Plug
 } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import { useAuth } from '@/hooks/useAuth';
@@ -18,6 +18,7 @@ const navItems = [
   { title: 'Clientes', url: '/admin/clientes', icon: Users },
   { title: 'Cupons', url: '/admin/cupons', icon: Tag },
   { title: 'Mídia', url: '/admin/midia', icon: Image },
+  { title: 'Integrações', url: '/admin/integracoes', icon: Plug },
   { title: 'Configurações', url: '/admin/configuracoes', icon: Settings },
 ];
 

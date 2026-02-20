@@ -25,6 +25,7 @@ import AdminCustomers from "./pages/admin/AdminCustomers";
 import AdminCoupons from "./pages/admin/AdminCoupons";
 import AdminSettings from "./pages/admin/AdminSettings";
 import AdminMedia from "./pages/admin/AdminMedia";
+import AdminIntegrations from "./pages/admin/AdminIntegrations";
 
 const queryClient = new QueryClient();
 
@@ -58,6 +59,7 @@ const App = () => (
                 <Route path="clientes" element={<AdminCustomers />} />
                 <Route path="cupons" element={<AdminCoupons />} />
                 <Route path="midia" element={<AdminMedia />} />
+                <Route path="integracoes" element={<AdminIntegrations />} />
                 <Route path="configuracoes" element={<AdminSettings />} />
               </Route>
 
