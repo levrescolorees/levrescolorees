@@ -21,8 +21,10 @@ const AdminIntegrations = () => {
   const [mpCardEnabled, setMpCardEnabled] = useState(true);
   const [mpBoletoEnabled, setMpBoletoEnabled] = useState(true);
   const [mpMaxInstallments, setMpMaxInstallments] = useState('12');
+  const [mpWebhookSecret, setMpWebhookSecret] = useState('');
   const [showToken, setShowToken] = useState(false);
   const [showPublicKey, setShowPublicKey] = useState(false);
+  const [showWebhookSecret, setShowWebhookSecret] = useState(false);
 
   useEffect(() => {
     if (settings?.mercado_pago) {
@@ -35,6 +37,7 @@ const AdminIntegrations = () => {
       setMpCardEnabled(mp.card_enabled ?? true);
       setMpBoletoEnabled(mp.boleto_enabled ?? true);
       setMpMaxInstallments(String(mp.max_installments || 12));
+      setMpWebhookSecret(mp.webhook_secret || '');
     }
   }, [settings]);
 
@@ -49,6 +52,7 @@ const AdminIntegrations = () => {
         card_enabled: mpCardEnabled,
         boleto_enabled: mpBoletoEnabled,
         max_installments: Number(mpMaxInstallments),
+        webhook_secret: mpWebhookSecret,
       };
       const { error } = await supabase
         .from('store_settings')
@@ -180,6 +184,30 @@ const AdminIntegrations = () => {
                 <Switch checked={mpBoletoEnabled} onCheckedChange={setMpBoletoEnabled} />
               </label>
             </div>
+          </div>
+
+          {/* Webhook Secret */}
+          <div>
+            <label className="font-body text-sm font-medium text-foreground">Webhook Secret</label>
+            <div className="relative mt-1">
+              <Input
+                type={showWebhookSecret ? 'text' : 'password'}
+                value={mpWebhookSecret}
+                onChange={e => setMpWebhookSecret(e.target.value)}
+                placeholder="Cole aqui o secret do webhook"
+                className="font-body pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowWebhookSecret(!showWebhookSecret)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {showWebhookSecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+            <p className="font-body text-xs text-muted-foreground mt-1">
+              Configure este secret no painel do Mercado Pago em Webhooks → Assinatura secreta. Ele é usado para validar que as notificações realmente vieram do Mercado Pago.
+            </p>
           </div>
 
           {/* Max installments */}

@@ -5,20 +5,80 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 }
 
-// Simple in-memory rate limiter
-const rateLimitMap = new Map<string, { count: number; resetAt: number }>()
-function isRateLimited(ip: string): boolean {
-  const now = Date.now()
-  const entry = rateLimitMap.get(ip)
-  if (!entry || now > entry.resetAt) { rateLimitMap.set(ip, { count: 1, resetAt: now + 60_000 }); return false }
-  entry.count++
-  return entry.count > 10
+// ========== SECURITY UTILITIES (inline) ==========
+
+function generateRequestId(): string {
+  return crypto.randomUUID()
 }
 
-// Simple dedup
+function maskEmail(email: string): string {
+  if (!email || !email.includes('@')) return '***'
+  const [user, domain] = email.split('@')
+  const domParts = domain.split('.')
+  return `${user[0]}***@${domParts[0][0]}***.${domParts.slice(1).join('.')}`
+}
+
+function validateUUID(id: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
+}
+
+function validateCPF(cpf: string): boolean {
+  const digits = cpf.replace(/\D/g, '')
+  if (digits.length !== 11) return false
+  if (/^(\d)\1{10}$/.test(digits)) return false
+  let sum = 0
+  for (let i = 0; i < 9; i++) sum += parseInt(digits[i]) * (10 - i)
+  let rem = (sum * 10) % 11
+  if (rem === 10) rem = 0
+  if (rem !== parseInt(digits[9])) return false
+  sum = 0
+  for (let i = 0; i < 10; i++) sum += parseInt(digits[i]) * (11 - i)
+  rem = (sum * 10) % 11
+  if (rem === 10) rem = 0
+  return rem === parseInt(digits[10])
+}
+
+function sanitizeString(str: string, maxLen: number): string {
+  if (!str || typeof str !== 'string') return ''
+  return str.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '').trim().slice(0, maxLen)
+}
+
+function validateEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.length <= 254
+}
+
+const VALID_UFS = new Set([
+  'AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG',
+  'PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO',
+])
+
+// ========== RATE LIMITING ==========
+
+const ipRateMap = new Map<string, { count: number; resetAt: number }>()
+const emailRateMap = new Map<string, { count: number; resetAt: number }>()
+
+function isIpRateLimited(ip: string): boolean {
+  const now = Date.now()
+  const entry = ipRateMap.get(ip)
+  if (!entry || now > entry.resetAt) { ipRateMap.set(ip, { count: 1, resetAt: now + 60_000 }); return false }
+  entry.count++
+  return entry.count > 30
+}
+
+function isEmailRateLimited(email: string): boolean {
+  const now = Date.now()
+  const key = email.toLowerCase().trim()
+  const entry = emailRateMap.get(key)
+  if (!entry || now > entry.resetAt) { emailRateMap.set(key, { count: 1, resetAt: now + 3600_000 }); return false }
+  entry.count++
+  return entry.count > 5
+}
+
+// ========== DEDUP ==========
+
 const dedupMap = new Map<string, number>()
 function isDuplicate(email: string, total: number): boolean {
-  const key = `${email}:${total}`
+  const key = `${email.toLowerCase()}:${total.toFixed(2)}`
   const now = Date.now()
   const last = dedupMap.get(key)
   if (last && now - last < 5 * 60_000) return true
@@ -26,16 +86,11 @@ function isDuplicate(email: string, total: number): boolean {
   return false
 }
 
-function validateEmail(email: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
-}
+// ========== MP CONFIG ==========
 
-async function getMpConfig(supabaseAdmin: any): Promise<{ access_token: string; enabled: boolean; pix_enabled: boolean; card_enabled: boolean; boleto_enabled: boolean; max_installments: number } | null> {
+async function getMpConfig(supabaseAdmin: any) {
   const { data } = await supabaseAdmin
-    .from('store_settings')
-    .select('value')
-    .eq('key', 'mercado_pago')
-    .single()
+    .from('store_settings').select('value').eq('key', 'mercado_pago').single()
   if (!data?.value) return null
   const v = data.value as any
   return {
@@ -48,15 +103,71 @@ async function getMpConfig(supabaseAdmin: any): Promise<{ access_token: string; 
   }
 }
 
+// ========== STRUCTURED LOG ==========
+
+function slog(rid: string, level: 'info' | 'warn' | 'error', msg: string, extra?: Record<string, unknown>) {
+  const payload = { request_id: rid, level, msg, ...extra }
+  if (level === 'error') console.error(JSON.stringify(payload))
+  else console.log(JSON.stringify(payload))
+}
+
+// ========== AUDIT LOG ==========
+
+async function auditLog(
+  supabaseAdmin: any,
+  action: string,
+  opts: { entity_type?: string; entity_id?: string; ip?: string; request_id?: string; details?: Record<string, unknown> }
+) {
+  try {
+    await supabaseAdmin.from('audit_logs').insert({
+      action,
+      entity_type: opts.entity_type || null,
+      entity_id: opts.entity_id || null,
+      ip_address: opts.ip || null,
+      request_id: opts.request_id || null,
+      details: opts.details || {},
+    })
+  } catch { /* never let audit logging break the flow */ }
+}
+
+// ========== HANDLER ==========
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
   }
 
+  const rid = generateRequestId()
+
   try {
     const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown'
-    if (isRateLimited(clientIp)) {
-      return new Response(JSON.stringify({ error: 'Rate limit exceeded' }), {
+
+    // --- Payload size check ---
+    const contentLength = parseInt(req.headers.get('content-length') || '0', 10)
+    if (contentLength > 50_000) {
+      slog(rid, 'warn', 'Payload too large', { ip: clientIp, size: contentLength })
+      return new Response(JSON.stringify({ error: 'Payload muito grande' }), {
+        status: 413, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    // --- Content-Type check ---
+    const ct = req.headers.get('content-type') || ''
+    if (!ct.includes('application/json')) {
+      return new Response(JSON.stringify({ error: 'Content-Type inválido' }), {
+        status: 415, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    // --- IP rate limit ---
+    if (isIpRateLimited(clientIp)) {
+      slog(rid, 'warn', 'IP rate limited', { ip: clientIp })
+      const supabaseAdmin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
+      await auditLog(supabaseAdmin, 'rate_limit_triggered', {
+        entity_type: 'payment', ip: clientIp, request_id: rid,
+        details: { type: 'ip', ip: clientIp },
+      })
+      return new Response(JSON.stringify({ error: 'Muitas tentativas. Aguarde um momento.' }), {
         status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
@@ -70,16 +181,67 @@ Deno.serve(async (req) => {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
-    if (!validateEmail(customer.email)) {
+
+    // --- Sanitize customer fields ---
+    const cleanName = sanitizeString(customer.name, 120)
+    const cleanEmail = sanitizeString(customer.email, 254).toLowerCase()
+    const cleanPhone = customer.phone.replace(/\D/g, '').slice(0, 11)
+    const cleanCpf = customer.cpf.replace(/\D/g, '').slice(0, 11)
+
+    if (!validateEmail(cleanEmail)) {
       return new Response(JSON.stringify({ error: 'Email inválido' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
+
+    // --- CPF validation (real digit verifier) ---
+    if (!validateCPF(cleanCpf)) {
+      return new Response(JSON.stringify({ error: 'CPF inválido' }), {
+        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    // --- Email rate limit ---
+    if (isEmailRateLimited(cleanEmail)) {
+      slog(rid, 'warn', 'Email rate limited', { email: maskEmail(cleanEmail) })
+      const supabaseAdmin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
+      await auditLog(supabaseAdmin, 'rate_limit_triggered', {
+        entity_type: 'payment', ip: clientIp, request_id: rid,
+        details: { type: 'email', email_masked: maskEmail(cleanEmail) },
+      })
+      return new Response(JSON.stringify({ error: 'Muitos pedidos recentes. Aguarde antes de tentar novamente.' }), {
+        status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    // --- Validate shipping address ---
     if (!shipping_address?.zip || !shipping_address?.street || !shipping_address?.number || !shipping_address?.city || !shipping_address?.state) {
       return new Response(JSON.stringify({ error: 'Endereço incompleto' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
+
+    const cleanStreet = sanitizeString(shipping_address.street, 200)
+    const cleanCity = sanitizeString(shipping_address.city, 100)
+    const cleanNeighborhood = sanitizeString(shipping_address.neighborhood || '', 100)
+    const cleanNumber = sanitizeString(shipping_address.number, 20)
+    const cleanComplement = sanitizeString(shipping_address.complement || '', 100)
+    const cleanZip = shipping_address.zip.replace(/\D/g, '').slice(0, 8)
+    const cleanState = shipping_address.state.toUpperCase().trim()
+
+    if (cleanZip.length !== 8 || !/^\d{8}$/.test(cleanZip)) {
+      return new Response(JSON.stringify({ error: 'CEP inválido' }), {
+        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    if (!VALID_UFS.has(cleanState)) {
+      return new Response(JSON.stringify({ error: 'UF inválida' }), {
+        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    // --- Validate payment method ---
     if (!['pix', 'card', 'boleto'].includes(payment_method)) {
       return new Response(JSON.stringify({ error: 'Método de pagamento inválido' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -91,12 +253,43 @@ Deno.serve(async (req) => {
       })
     }
 
+    // --- Validate coupon code format ---
+    if (coupon_code && (!/^[a-zA-Z0-9]+$/.test(coupon_code) || coupon_code.length > 30)) {
+      return new Response(JSON.stringify({ error: 'Código de cupom inválido' }), {
+        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    // --- Validate items ---
+    for (const item of items) {
+      if (!item.product_id || !validateUUID(item.product_id)) {
+        return new Response(JSON.stringify({ error: 'ID de produto inválido' }), {
+          status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+      const qty = Number(item.quantity)
+      if (!Number.isInteger(qty) || qty < 1 || qty > 100) {
+        return new Response(JSON.stringify({ error: 'Quantidade inválida (1-100)' }), {
+          status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+      if (item.variant_id && !validateUUID(item.variant_id)) {
+        return new Response(JSON.stringify({ error: 'ID de variante inválido' }), {
+          status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+    }
+
+    slog(rid, 'info', 'Processing payment request', {
+      ip: clientIp, email: maskEmail(cleanEmail), method: payment_method, item_count: items.length,
+    })
+
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     )
 
-    // --- Get MP config from store_settings ---
+    // --- Get MP config ---
     const mpConfig = await getMpConfig(supabaseAdmin)
     const mpToken = mpConfig?.access_token || Deno.env.get('MERCADO_PAGO_ACCESS_TOKEN') || ''
     const mpEnabled = mpConfig?.enabled ?? !!mpToken
@@ -109,16 +302,15 @@ Deno.serve(async (req) => {
       .in('id', productIds)
 
     if (pErr || !dbProducts) {
+      slog(rid, 'error', 'Failed to validate products', { error: pErr?.message })
       return new Response(JSON.stringify({ error: 'Erro ao validar produtos' }), {
         status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
 
     const { data: priceRules } = await supabaseAdmin
-      .from('price_rules')
-      .select('*')
-      .in('product_id', productIds)
-      .eq('is_active', true)
+      .from('price_rules').select('*')
+      .in('product_id', productIds).eq('is_active', true)
       .order('min_quantity', { ascending: false })
 
     const productMap = new Map(dbProducts.map(p => [p.id, p]))
@@ -132,7 +324,7 @@ Deno.serve(async (req) => {
     for (const item of items) {
       const product = productMap.get(item.product_id)
       if (!product || !product.is_active) {
-        return new Response(JSON.stringify({ error: `Produto "${item.product_id}" indisponível` }), {
+        return new Response(JSON.stringify({ error: `Produto indisponível` }), {
           status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
       }
@@ -188,8 +380,7 @@ Deno.serve(async (req) => {
       if (freeRule?.min_order_for_free && subtotal >= freeRule.min_order_for_free) {
         shipping = 0
       } else {
-        const stateUpper = shipping_address.state?.toUpperCase()?.trim()
-        const stateRule = stateUpper ? shippingRules.find(r => r.rule_type === 'by_state' && r.state?.toUpperCase() === stateUpper) : null
+        const stateRule = shippingRules.find(r => r.rule_type === 'by_state' && r.state?.toUpperCase() === cleanState)
         if (stateRule) shipping = stateRule.value
         else {
           const fixedRule = shippingRules.find(r => r.rule_type === 'fixed')
@@ -199,48 +390,68 @@ Deno.serve(async (req) => {
       }
     } else if (subtotal >= 299) { shipping = 0 }
 
-    // --- Pix discount ---
+    // --- Pix discount & total ---
     const afterCoupon = subtotal - couponDiscount + shipping
     const pixDiscount = payment_method === 'pix' ? afterCoupon * 0.05 : 0
     const totalDiscount = couponDiscount + pixDiscount
     const total = afterCoupon - pixDiscount
 
     // --- Anti-duplicate ---
-    if (isDuplicate(customer.email, total)) {
+    if (isDuplicate(cleanEmail, total)) {
+      slog(rid, 'warn', 'Duplicate payment attempt', { email: maskEmail(cleanEmail) })
       return new Response(JSON.stringify({ error: 'Pedido duplicado detectado. Aguarde alguns minutos.' }), {
         status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
 
+    // --- Validate installments ---
+    if (payment_method === 'card' && installments) {
+      const inst = Number(installments)
+      const maxInst = mpConfig?.max_installments || 12
+      if (!Number.isInteger(inst) || inst < 1 || inst > maxInst) {
+        return new Response(JSON.stringify({ error: `Parcelas inválidas (1-${maxInst})` }), {
+          status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+    }
+
     // --- Find or create customer ---
     let customerId: string
     const { data: existing } = await supabaseAdmin
-      .from('customers').select('id').eq('email', customer.email).maybeSingle()
+      .from('customers').select('id').eq('email', cleanEmail).maybeSingle()
 
     if (existing) {
       customerId = existing.id
       await supabaseAdmin.from('customers').update({
-        name: customer.name, phone: customer.phone, cpf: customer.cpf,
-        cnpj: customer.cnpj || null, company_name: customer.company_name || null,
+        name: cleanName, phone: cleanPhone, cpf: cleanCpf,
+        cnpj: customer.cnpj?.replace(/\D/g, '') || null,
+        company_name: sanitizeString(customer.company_name || '', 120) || null,
         is_reseller: customer.is_reseller || false,
       }).eq('id', customerId)
     } else {
       const { data: newC, error: cErr } = await supabaseAdmin
         .from('customers').insert({
-          name: customer.name, email: customer.email, phone: customer.phone,
-          cpf: customer.cpf, cnpj: customer.cnpj || null,
-          company_name: customer.company_name || null, is_reseller: customer.is_reseller || false,
+          name: cleanName, email: cleanEmail, phone: cleanPhone,
+          cpf: cleanCpf, cnpj: customer.cnpj?.replace(/\D/g, '') || null,
+          company_name: sanitizeString(customer.company_name || '', 120) || null,
+          is_reseller: customer.is_reseller || false,
         }).select().single()
       if (cErr) throw cErr
       customerId = newC.id
     }
 
     // --- Create order ---
+    const sanitizedAddress = {
+      zip: cleanZip, street: cleanStreet, number: cleanNumber,
+      complement: cleanComplement, neighborhood: cleanNeighborhood,
+      city: cleanCity, state: cleanState,
+    }
+
     const { data: order, error: oErr } = await supabaseAdmin
       .from('orders').insert({
         customer_id: customerId, subtotal, shipping, discount: totalDiscount, total,
         payment_method, payment_status: 'pending',
-        shipping_address: shipping_address as any, status: 'pendente',
+        shipping_address: sanitizedAddress as any, status: 'pendente',
       }).select().single()
     if (oErr) throw oErr
 
@@ -265,6 +476,8 @@ Deno.serve(async (req) => {
         await supabaseAdmin.from('coupons').update({ used_count: couponData.used_count + 1 }).eq('id', couponId)
       }
     }
+
+    slog(rid, 'info', 'Order created', { order_id: order.id, total, method: payment_method })
 
     // --- Call Mercado Pago ---
     if (!mpToken || !mpEnabled) {
@@ -298,15 +511,15 @@ Deno.serve(async (req) => {
       description: `Pedido #${order.order_number}`,
       external_reference: order.id,
       payer: {
-        email: customer.email,
-        first_name: customer.name.split(' ')[0],
-        last_name: customer.name.split(' ').slice(1).join(' ') || customer.name,
-        identification: { type: 'CPF', number: customer.cpf.replace(/\D/g, '') },
+        email: cleanEmail,
+        first_name: cleanName.split(' ')[0],
+        last_name: cleanName.split(' ').slice(1).join(' ') || cleanName,
+        identification: { type: 'CPF', number: cleanCpf },
       },
       metadata: { order_id: order.id, order_number: order.order_number },
     }
 
-    // Webhook URL for MP to notify payment updates
+    // Webhook URL
     mpBody.notification_url = `${Deno.env.get('SUPABASE_URL')}/functions/v1/mp-webhook`
 
     if (payment_method === 'pix') {
@@ -339,7 +552,7 @@ Deno.serve(async (req) => {
     const mpData = await mpRes.json()
 
     if (!mpRes.ok) {
-      console.error('MP error:', mpData)
+      slog(rid, 'error', 'MP payment failed', { order_id: order.id, mp_status: mpData.status, mp_message: mpData.message })
       await supabaseAdmin.from('orders').update({
         payment_status: 'rejected', payment_details: mpData,
       }).eq('id', order.id)
@@ -362,6 +575,8 @@ Deno.serve(async (req) => {
         note: 'Pagamento aprovado automaticamente',
       })
     }
+
+    slog(rid, 'info', 'Payment processed', { order_id: order.id, mp_status: mpData.status })
 
     const response: any = {
       order_id: order.id, order_number: order.order_number,
@@ -393,7 +608,7 @@ Deno.serve(async (req) => {
     })
 
   } catch (err) {
-    console.error('create-payment error:', err)
+    slog(rid, 'error', 'Unhandled error', { error: String(err) })
     return new Response(JSON.stringify({ error: 'Erro interno do servidor' }), {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
