@@ -7,21 +7,16 @@ const corsHeaders = {
 
 // Simple in-memory rate limiter
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>()
-
 function isRateLimited(ip: string): boolean {
   const now = Date.now()
   const entry = rateLimitMap.get(ip)
-  if (!entry || now > entry.resetAt) {
-    rateLimitMap.set(ip, { count: 1, resetAt: now + 60_000 })
-    return false
-  }
+  if (!entry || now > entry.resetAt) { rateLimitMap.set(ip, { count: 1, resetAt: now + 60_000 }); return false }
   entry.count++
   return entry.count > 10
 }
 
-// Simple dedup: same email + total in 5 min window
+// Simple dedup
 const dedupMap = new Map<string, number>()
-
 function isDuplicate(email: string, total: number): boolean {
   const key = `${email}:${total}`
   const now = Date.now()
@@ -33,6 +28,24 @@ function isDuplicate(email: string, total: number): boolean {
 
 function validateEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+}
+
+async function getMpConfig(supabaseAdmin: any): Promise<{ access_token: string; enabled: boolean; pix_enabled: boolean; card_enabled: boolean; boleto_enabled: boolean; max_installments: number } | null> {
+  const { data } = await supabaseAdmin
+    .from('store_settings')
+    .select('value')
+    .eq('key', 'mercado_pago')
+    .single()
+  if (!data?.value) return null
+  const v = data.value as any
+  return {
+    access_token: v.access_token || '',
+    enabled: v.enabled ?? false,
+    pix_enabled: v.pix_enabled ?? true,
+    card_enabled: v.card_enabled ?? true,
+    boleto_enabled: v.boleto_enabled ?? true,
+    max_installments: v.max_installments || 12,
+  }
 }
 
 Deno.serve(async (req) => {
@@ -83,6 +96,11 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     )
 
+    // --- Get MP config from store_settings ---
+    const mpConfig = await getMpConfig(supabaseAdmin)
+    const mpToken = mpConfig?.access_token || Deno.env.get('MERCADO_PAGO_ACCESS_TOKEN') || ''
+    const mpEnabled = mpConfig?.enabled ?? !!mpToken
+
     // --- Validate items against DB & recalculate total ---
     const productIds = [...new Set(items.map((i: any) => i.product_id))]
     const { data: dbProducts, error: pErr } = await supabaseAdmin
@@ -96,7 +114,6 @@ Deno.serve(async (req) => {
       })
     }
 
-    // Fetch price rules for quantity discounts
     const { data: priceRules } = await supabaseAdmin
       .from('price_rules')
       .select('*')
@@ -125,23 +142,16 @@ Deno.serve(async (req) => {
         })
       }
 
-      // Find best price rule for this product + quantity
       let unitPrice = product.retail_price
       const rules = (priceRules || []).filter(r => r.product_id === item.product_id)
       for (const rule of rules) {
-        if (item.quantity >= rule.min_quantity) {
-          unitPrice = rule.price
-          break // rules sorted desc by min_quantity, first match is best
-        }
+        if (item.quantity >= rule.min_quantity) { unitPrice = rule.price; break }
       }
 
       validatedItems.push({
-        product_id: item.product_id,
-        variant_id: item.variant_id || null,
-        product_name: product.name,
-        variant_name: item.variant_name || null,
-        quantity: item.quantity,
-        unit_price: unitPrice,
+        product_id: item.product_id, variant_id: item.variant_id || null,
+        product_name: product.name, variant_name: item.variant_name || null,
+        quantity: item.quantity, unit_price: unitPrice,
       })
       subtotal += unitPrice * item.quantity
     }
@@ -151,22 +161,18 @@ Deno.serve(async (req) => {
     let couponId: string | null = null
     if (coupon_code) {
       const { data: coupon } = await supabaseAdmin
-        .from('coupons')
-        .select('*')
+        .from('coupons').select('*')
         .eq('code', coupon_code.toUpperCase().trim())
-        .eq('is_active', true)
-        .single()
+        .eq('is_active', true).single()
 
       if (coupon) {
         const now = new Date()
         const notExpired = !coupon.expires_at || new Date(coupon.expires_at) > now
         const notExhausted = !coupon.max_uses || coupon.used_count < coupon.max_uses
         const meetsMinimum = subtotal >= coupon.min_order_value
-
         if (notExpired && notExhausted && meetsMinimum) {
           couponDiscount = coupon.discount_type === 'percentage'
-            ? subtotal * (coupon.discount_value / 100)
-            : coupon.discount_value
+            ? subtotal * (coupon.discount_value / 100) : coupon.discount_value
           couponId = coupon.id
         }
       }
@@ -174,10 +180,7 @@ Deno.serve(async (req) => {
 
     // --- Calculate shipping ---
     const { data: shippingRules } = await supabaseAdmin
-      .from('shipping_rules')
-      .select('*')
-      .eq('is_active', true)
-      .order('sort_order')
+      .from('shipping_rules').select('*').eq('is_active', true).order('sort_order')
 
     let shipping = 19.90
     if (shippingRules?.length) {
@@ -194,9 +197,7 @@ Deno.serve(async (req) => {
           else if (freeRule) shipping = freeRule.value
         }
       }
-    } else if (subtotal >= 299) {
-      shipping = 0
-    }
+    } else if (subtotal >= 299) { shipping = 0 }
 
     // --- Pix discount ---
     const afterCoupon = subtotal - couponDiscount + shipping
@@ -214,10 +215,7 @@ Deno.serve(async (req) => {
     // --- Find or create customer ---
     let customerId: string
     const { data: existing } = await supabaseAdmin
-      .from('customers')
-      .select('id')
-      .eq('email', customer.email)
-      .maybeSingle()
+      .from('customers').select('id').eq('email', customer.email).maybeSingle()
 
     if (existing) {
       customerId = existing.id
@@ -228,55 +226,40 @@ Deno.serve(async (req) => {
       }).eq('id', customerId)
     } else {
       const { data: newC, error: cErr } = await supabaseAdmin
-        .from('customers')
-        .insert({
+        .from('customers').insert({
           name: customer.name, email: customer.email, phone: customer.phone,
           cpf: customer.cpf, cnpj: customer.cnpj || null,
           company_name: customer.company_name || null, is_reseller: customer.is_reseller || false,
-        })
-        .select().single()
+        }).select().single()
       if (cErr) throw cErr
       customerId = newC.id
     }
 
     // --- Create order ---
     const { data: order, error: oErr } = await supabaseAdmin
-      .from('orders')
-      .insert({
-        customer_id: customerId,
-        subtotal, shipping, discount: totalDiscount, total,
-        payment_method,
-        payment_status: 'pending',
-        shipping_address: shipping_address as any,
-        status: 'pendente',
-      })
-      .select().single()
+      .from('orders').insert({
+        customer_id: customerId, subtotal, shipping, discount: totalDiscount, total,
+        payment_method, payment_status: 'pending',
+        shipping_address: shipping_address as any, status: 'pendente',
+      }).select().single()
     if (oErr) throw oErr
 
     // --- Create order items ---
     const orderItems = validatedItems.map(item => ({
-      order_id: order.id,
-      product_id: item.product_id,
-      variant_id: item.variant_id,
-      product_name: item.product_name,
-      variant_name: item.variant_name,
-      quantity: item.quantity,
-      unit_price: item.unit_price,
+      order_id: order.id, product_id: item.product_id, variant_id: item.variant_id,
+      product_name: item.product_name, variant_name: item.variant_name,
+      quantity: item.quantity, unit_price: item.unit_price,
       total_price: item.unit_price * item.quantity,
     }))
     await supabaseAdmin.from('order_items').insert(orderItems)
 
     // --- Initial status history ---
     await supabaseAdmin.from('order_status_history').insert({
-      order_id: order.id,
-      to_status: 'pendente',
-      note: 'Pedido criado via checkout',
+      order_id: order.id, to_status: 'pendente', note: 'Pedido criado via checkout',
     })
 
     // --- Increment coupon usage ---
     if (couponId) {
-      await supabaseAdmin.rpc('', {}).catch(() => {}) // no-op if no rpc
-      // Manual increment
       const { data: couponData } = await supabaseAdmin.from('coupons').select('used_count').eq('id', couponId).single()
       if (couponData) {
         await supabaseAdmin.from('coupons').update({ used_count: couponData.used_count + 1 }).eq('id', couponId)
@@ -284,18 +267,28 @@ Deno.serve(async (req) => {
     }
 
     // --- Call Mercado Pago ---
-    const mpToken = Deno.env.get('MERCADO_PAGO_ACCESS_TOKEN')
-    if (!mpToken) {
-      // No MP token configured – return order without payment processing
+    if (!mpToken || !mpEnabled) {
       return new Response(JSON.stringify({
-        order_id: order.id,
-        order_number: order.order_number,
-        payment_status: 'pending',
-        payment_method,
-        total,
-        message: 'Pedido criado. Pagamento será processado quando o gateway estiver configurado.',
-      }), {
-        status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        order_id: order.id, order_number: order.order_number,
+        payment_status: 'pending', payment_method, total,
+        message: 'Pedido criado. Configure o Mercado Pago em Integrações para processar pagamentos.',
+      }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+
+    // Check if payment method is enabled
+    if (payment_method === 'pix' && !mpConfig?.pix_enabled) {
+      return new Response(JSON.stringify({ error: 'Pix não está habilitado' }), {
+        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+    if (payment_method === 'card' && !mpConfig?.card_enabled) {
+      return new Response(JSON.stringify({ error: 'Cartão não está habilitado' }), {
+        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+    if (payment_method === 'boleto' && !mpConfig?.boleto_enabled) {
+      return new Response(JSON.stringify({ error: 'Boleto não está habilitado' }), {
+        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
 
@@ -318,11 +311,13 @@ Deno.serve(async (req) => {
     } else if (payment_method === 'card') {
       mpBody.token = card_token
       mpBody.installments = installments || 1
-      // Calculate installment amount with interest
       if (installments && installments > 1) {
-        const rate = installments <= 6 ? 0.0299 : 0.0349
-        const installmentTotal = total * (1 + rate * installments)
+        const maxInst = mpConfig?.max_installments || 12
+        const actualInst = Math.min(installments, maxInst)
+        const rate = actualInst <= 6 ? 0.0299 : 0.0349
+        const installmentTotal = total * (1 + rate * actualInst)
         mpBody.transaction_amount = Number(installmentTotal.toFixed(2))
+        mpBody.installments = actualInst
       }
     } else if (payment_method === 'boleto') {
       mpBody.payment_method_id = 'bolbradesco'
@@ -342,26 +337,18 @@ Deno.serve(async (req) => {
 
     if (!mpRes.ok) {
       console.error('MP error:', mpData)
-      // Update order with error
       await supabaseAdmin.from('orders').update({
-        payment_status: 'rejected',
-        payment_details: mpData,
+        payment_status: 'rejected', payment_details: mpData,
       }).eq('id', order.id)
-
       return new Response(JSON.stringify({
         error: 'Erro no processamento do pagamento',
-        details: mpData.message || 'Tente novamente',
-        order_id: order.id,
-      }), {
-        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+        details: mpData.message || 'Tente novamente', order_id: order.id,
+      }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
-    // Update order with MP data
     const paymentStatus = mpData.status === 'approved' ? 'approved' : 'pending'
     await supabaseAdmin.from('orders').update({
-      payment_id: String(mpData.id),
-      payment_status: paymentStatus,
+      payment_id: String(mpData.id), payment_status: paymentStatus,
       payment_details: mpData,
       status: paymentStatus === 'approved' ? 'confirmado' : 'pendente',
     }).eq('id', order.id)
@@ -373,22 +360,17 @@ Deno.serve(async (req) => {
       })
     }
 
-    // Build response based on method
     const response: any = {
-      order_id: order.id,
-      order_number: order.order_number,
-      payment_status: paymentStatus,
-      payment_method,
+      order_id: order.id, order_number: order.order_number,
+      payment_status: paymentStatus, payment_method,
       total: mpBody.transaction_amount,
     }
 
     if (payment_method === 'pix') {
       const txData = mpData.point_of_interaction?.transaction_data
       response.pix = {
-        qr_code: txData?.qr_code,
-        qr_code_base64: txData?.qr_code_base64,
-        ticket_url: txData?.ticket_url,
-        expiration: mpData.date_of_expiration,
+        qr_code: txData?.qr_code, qr_code_base64: txData?.qr_code_base64,
+        ticket_url: txData?.ticket_url, expiration: mpData.date_of_expiration,
       }
     } else if (payment_method === 'boleto') {
       response.boleto = {
@@ -398,8 +380,7 @@ Deno.serve(async (req) => {
       }
     } else if (payment_method === 'card') {
       response.card = {
-        last_four: mpData.card?.last_four_digits,
-        installments: mpData.installments,
+        last_four: mpData.card?.last_four_digits, installments: mpData.installments,
         installment_amount: mpData.transaction_details?.installment_amount,
       }
     }

@@ -13,6 +13,7 @@ const AdminIntegrations = () => {
   const qc = useQueryClient();
   const { data: settings, isLoading } = useStoreSettings();
 
+  const [mpPublicKey, setMpPublicKey] = useState('');
   const [mpAccessToken, setMpAccessToken] = useState('');
   const [mpEnvironment, setMpEnvironment] = useState<'sandbox' | 'production'>('sandbox');
   const [mpEnabled, setMpEnabled] = useState(false);
@@ -21,10 +22,12 @@ const AdminIntegrations = () => {
   const [mpBoletoEnabled, setMpBoletoEnabled] = useState(true);
   const [mpMaxInstallments, setMpMaxInstallments] = useState('12');
   const [showToken, setShowToken] = useState(false);
+  const [showPublicKey, setShowPublicKey] = useState(false);
 
   useEffect(() => {
     if (settings?.mercado_pago) {
       const mp = settings.mercado_pago as any;
+      setMpPublicKey(mp.public_key || '');
       setMpAccessToken(mp.access_token || '');
       setMpEnvironment(mp.environment || 'sandbox');
       setMpEnabled(mp.enabled ?? false);
@@ -38,6 +41,7 @@ const AdminIntegrations = () => {
   const saveMp = useMutation({
     mutationFn: async () => {
       const value = {
+        public_key: mpPublicKey,
         access_token: mpAccessToken,
         environment: mpEnvironment,
         enabled: mpEnabled,
@@ -111,6 +115,30 @@ const AdminIntegrations = () => {
             </Select>
           </div>
 
+          {/* Public Key */}
+          <div>
+            <label className="font-body text-sm font-medium text-foreground">Public Key</label>
+            <div className="relative mt-1">
+              <Input
+                type={showPublicKey ? 'text' : 'password'}
+                value={mpPublicKey}
+                onChange={e => setMpPublicKey(e.target.value)}
+                placeholder="APP_USR-... ou TEST-..."
+                className="font-body pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPublicKey(!showPublicKey)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {showPublicKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+            <p className="font-body text-xs text-muted-foreground mt-1">
+              Usada no frontend para tokenizar cartões (Checkout Transparente)
+            </p>
+          </div>
+
           {/* Access Token */}
           <div>
             <label className="font-body text-sm font-medium text-foreground">Access Token</label>
@@ -119,7 +147,7 @@ const AdminIntegrations = () => {
                 type={showToken ? 'text' : 'password'}
                 value={mpAccessToken}
                 onChange={e => setMpAccessToken(e.target.value)}
-                placeholder="APP_USR-..."
+                placeholder="APP_USR-... ou TEST-..."
                 className="font-body pr-10"
               />
               <button
@@ -131,7 +159,7 @@ const AdminIntegrations = () => {
               </button>
             </div>
             <p className="font-body text-xs text-muted-foreground mt-1">
-              Encontre em: Mercado Pago → Seu negócio → Configurações → Credenciais
+              Usado no backend para processar pagamentos. Encontre em: Mercado Pago → Credenciais
             </p>
           </div>
 

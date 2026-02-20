@@ -13,7 +13,6 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json()
 
-    // MP sends different notification types
     if (body.type !== 'payment' && body.action !== 'payment.updated' && body.action !== 'payment.created') {
       return new Response(JSON.stringify({ received: true }), {
         status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -27,15 +26,33 @@ Deno.serve(async (req) => {
       })
     }
 
-    const mpToken = Deno.env.get('MERCADO_PAGO_ACCESS_TOKEN')
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+    )
+
+    // Read access_token from store_settings, fallback to env
+    let mpToken = ''
+    const { data: mpSettings } = await supabaseAdmin
+      .from('store_settings')
+      .select('value')
+      .eq('key', 'mercado_pago')
+      .single()
+    if (mpSettings?.value) {
+      mpToken = (mpSettings.value as any).access_token || ''
+    }
     if (!mpToken) {
-      console.error('MERCADO_PAGO_ACCESS_TOKEN not configured')
+      mpToken = Deno.env.get('MERCADO_PAGO_ACCESS_TOKEN') || ''
+    }
+
+    if (!mpToken) {
+      console.error('No MP access_token configured')
       return new Response(JSON.stringify({ error: 'Gateway not configured' }), {
         status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
 
-    // ALWAYS fetch payment details from MP API (never trust webhook payload)
+    // Fetch payment details from MP API
     const mpRes = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
       headers: { 'Authorization': `Bearer ${mpToken}` },
     })
@@ -56,12 +73,6 @@ Deno.serve(async (req) => {
       })
     }
 
-    const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
-    )
-
-    // Fetch order to validate amount
     const { data: order, error: oErr } = await supabaseAdmin
       .from('orders')
       .select('id, total, status, payment_status')
@@ -75,7 +86,6 @@ Deno.serve(async (req) => {
       })
     }
 
-    // Map MP status to our statuses
     const statusMap: Record<string, { payment: string; order: string | null }> = {
       'approved': { payment: 'approved', order: 'confirmado' },
       'rejected': { payment: 'rejected', order: 'cancelado' },
@@ -89,22 +99,16 @@ Deno.serve(async (req) => {
 
     const mapped = statusMap[mpData.status] || { payment: mpData.status, order: null }
 
-    // Build update
     const update: any = {
       payment_status: mapped.payment,
       payment_details: mpData,
       payment_id: String(mpData.id),
     }
 
-    // Only update order status if we have a mapping and it's different
     if (mapped.order && mapped.order !== order.status) {
       update.status = mapped.order
-
-      // Insert status history
       await supabaseAdmin.from('order_status_history').insert({
-        order_id: orderId,
-        from_status: order.status,
-        to_status: mapped.order,
+        order_id: orderId, from_status: order.status, to_status: mapped.order,
         note: `Webhook MP: ${mpData.status} (payment ${mpData.id})`,
       })
     }
