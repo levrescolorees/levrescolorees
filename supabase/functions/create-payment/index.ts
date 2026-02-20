@@ -306,6 +306,9 @@ Deno.serve(async (req) => {
       metadata: { order_id: order.id, order_number: order.order_number },
     }
 
+    // Webhook URL for MP to notify payment updates
+    mpBody.notification_url = `${Deno.env.get('SUPABASE_URL')}/functions/v1/mp-webhook`
+
     if (payment_method === 'pix') {
       mpBody.payment_method_id = 'pix'
     } else if (payment_method === 'card') {
