@@ -27,7 +27,7 @@ Deno.serve(async (req) => {
 
     const { data: order, error } = await supabaseAdmin
       .from('orders')
-      .select('payment_status, status, payment_method')
+      .select('payment_status, status, payment_method, payment_id')
       .eq('id', orderId)
       .single()
 
@@ -35,6 +35,69 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: 'Pedido não encontrado' }), {
         status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
+    }
+
+    // Active check: if still pending and has payment_id, query MP API directly
+    if (order.payment_status === 'pending' && order.payment_id) {
+      try {
+        // Get access token from store_settings
+        const { data: settings } = await supabaseAdmin
+          .from('store_settings')
+          .select('value')
+          .eq('key', 'mercado_pago')
+          .single()
+
+        const mpToken = (settings?.value as any)?.access_token || Deno.env.get('MERCADO_PAGO_ACCESS_TOKEN') || ''
+
+        if (mpToken) {
+          const mpRes = await fetch(`https://api.mercadopago.com/v1/payments/${order.payment_id}`, {
+            headers: { 'Authorization': `Bearer ${mpToken}` },
+          })
+
+          if (mpRes.ok) {
+            const mpData = await mpRes.json()
+            const mpStatus = mpData.status
+
+            if (mpStatus === 'approved') {
+              await supabaseAdmin.from('orders').update({
+                payment_status: 'approved',
+                status: 'confirmado',
+                payment_details: mpData,
+              }).eq('id', orderId)
+
+              await supabaseAdmin.from('order_status_history').insert({
+                order_id: orderId,
+                from_status: order.status,
+                to_status: 'confirmado',
+                note: 'Pagamento aprovado (verificação ativa)',
+              })
+
+              return new Response(JSON.stringify({
+                payment_status: 'approved',
+                order_status: 'confirmado',
+                payment_method: order.payment_method,
+              }), {
+                status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              })
+            } else if (mpStatus === 'rejected' || mpStatus === 'cancelled') {
+              await supabaseAdmin.from('orders').update({
+                payment_status: mpStatus,
+              }).eq('id', orderId)
+
+              return new Response(JSON.stringify({
+                payment_status: mpStatus,
+                order_status: order.status,
+                payment_method: order.payment_method,
+              }), {
+                status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              })
+            }
+          }
+        }
+      } catch (mpErr) {
+        console.error('MP active check error:', mpErr)
+        // Fall through to return DB status
+      }
     }
 
     return new Response(JSON.stringify({

@@ -179,12 +179,6 @@ const Checkout = () => {
     if (pollingRef.current) clearInterval(pollingRef.current);
     pollingRef.current = setInterval(async () => {
       try {
-        const { data, error } = await supabase.functions.invoke('payment-status', {
-          method: 'GET',
-          headers: { 'Content-Type': 'application/json' },
-          body: null,
-        });
-        // Use fetch directly for GET with query params
         const res = await fetch(
           `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co/functions/v1/payment-status?order_id=${orderId}`,
           { headers: { 'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY } }
