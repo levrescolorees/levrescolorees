@@ -1,81 +1,64 @@
 
+# Corrigir Deteccao de Pagamento Pix no Mercado Pago
 
-# Corrigir Integração Mercado Pago: Public Key + Access Token
+## Problema Identificado
 
-## Problema
+O pagamento Pix e processado com sucesso no Mercado Pago, mas o sistema nunca detecta que foi pago. Isso acontece por **dois motivos**:
 
-1. A tela de Integrações pede apenas o **Access Token**, mas o Checkout Transparente exige tambem a **Public Key** (para o SDK do frontend tokenizar cartoes).
-2. O edge function `create-payment` le o token de variavel de ambiente (`Deno.env.get`), mas as credenciais sao salvas na tabela `store_settings`. Resultado: o gateway nunca esta "configurado" e o pedido fica em "Aguardando Pagamento" sem processar.
-3. O frontend do checkout nao carrega o SDK do Mercado Pago com a Public Key.
+1. **Webhook nao configurado**: Quando o `create-payment` cria o pagamento na API do Mercado Pago, ele nao envia o campo `notification_url`. Sem isso, o Mercado Pago nunca avisa seu sistema que o pagamento foi aprovado.
+
+2. **Polling passivo**: O `payment-status` apenas le o status do banco de dados. Como o webhook nunca atualiza o banco, o polling sempre retorna "pending" — mesmo que o cliente ja tenha pago.
 
 ## Solucao
 
-### 1. AdminIntegrations.tsx — Adicionar campo Public Key
+### 1. Adicionar `notification_url` no `create-payment`
 
-- Adicionar estado `mpPublicKey` e campo de input para a **Public Key** (formato `APP_USR-...` ou `TEST-...`)
-- Salvar no `store_settings` junto com o access_token:
-  ```
-  value: {
-    public_key: mpPublicKey,
-    access_token: mpAccessToken,
-    environment, enabled, pix_enabled, card_enabled, boleto_enabled, max_installments
-  }
-  ```
-- Adicionar toggle de visibilidade para a Public Key tambem
-- Atualizar o `useEffect` para carregar `mp.public_key`
+Incluir a URL do webhook na chamada para a API do Mercado Pago para que ele envie notificacoes automaticas quando o pagamento for aprovado.
 
-### 2. Edge Function create-payment — Ler token do banco
+```
+mpBody.notification_url = `https://jefuidilwgzsnifjgdaf.supabase.co/functions/v1/mp-webhook`
+```
 
-Modificar `supabase/functions/create-payment/index.ts`:
-- Em vez de `Deno.env.get('MERCADO_PAGO_ACCESS_TOKEN')`, buscar da tabela `store_settings` onde `key = 'mercado_pago'`
-- Extrair `value.access_token` do registro
-- Verificar se `value.enabled === true` antes de processar
-- Fallback: se nao encontrar no banco, tentar `Deno.env.get` como backup
+### 2. Tornar `payment-status` ativo
 
-### 3. Edge Function mp-webhook — Ler token do banco
+Em vez de apenas ler o banco, o `payment-status` tambem consultara a API do Mercado Pago diretamente quando o status ainda for "pending". Se detectar que foi pago, atualiza o banco na hora. Isso funciona como fallback caso o webhook falhe.
 
-Modificar `supabase/functions/mp-webhook/index.ts`:
-- Mesmo ajuste: buscar access_token de `store_settings` em vez de env var
-- Manter fallback para env var
+### 3. Corrigir polling no Checkout
 
-### 4. Checkout.tsx — Carregar SDK com Public Key
-
-Modificar `src/pages/Checkout.tsx`:
-- Buscar a `public_key` da `store_settings` via `useStoreSettings()`
-- No step de pagamento por cartao, carregar o SDK do Mercado Pago (`https://sdk.mercadopago.com/js/v2`) dinamicamente
-- Inicializar `new MercadoPago(publicKey)` e criar card form/tokenizacao
-- Usar o token gerado no `handleSubmit`
+Remover a chamada duplicada (`supabase.functions.invoke` + `fetch`) e usar apenas uma chamada limpa.
 
 ## Secao Tecnica
 
 ### Arquivos modificados
 
 ```text
-src/pages/admin/AdminIntegrations.tsx  -- adicionar campo public_key
-supabase/functions/create-payment/index.ts  -- ler token do store_settings
-supabase/functions/mp-webhook/index.ts  -- ler token do store_settings
-src/pages/Checkout.tsx  -- carregar SDK MP com public_key
+supabase/functions/create-payment/index.ts  -- adicionar notification_url ao payload MP
+supabase/functions/payment-status/index.ts  -- consultar MP API ativamente quando pending
+src/pages/Checkout.tsx                       -- corrigir polling duplicado
 ```
 
 ### Fluxo corrigido
 
 ```text
-Admin salva Public Key + Access Token em store_settings
-                    |
-Frontend (Checkout) le Public Key do store_settings
-                    |
-SDK MP inicializa com Public Key -> tokeniza cartao
-                    |
-create-payment le Access Token do store_settings -> chama MP API
-                    |
-mp-webhook le Access Token do store_settings -> valida pagamento
+create-payment envia notification_url para MP
+        |
+   [Pix pago]
+        |
+   Caminho A: MP envia webhook -> mp-webhook atualiza DB -> polling detecta "approved"
+   Caminho B: polling chama payment-status -> consulta MP API -> atualiza DB -> retorna "approved"
 ```
 
-### Ordem de execucao
+### Detalhes de cada mudanca
 
-1. Atualizar AdminIntegrations com campo Public Key
-2. Atualizar create-payment para ler credenciais do banco
-3. Atualizar mp-webhook para ler credenciais do banco
-4. Atualizar Checkout.tsx para carregar SDK MP com Public Key
-5. Deploy das edge functions
+**create-payment/index.ts:**
+- Adicionar `notification_url` apontando para `mp-webhook` no corpo da requisicao a API do Mercado Pago
 
+**payment-status/index.ts:**
+- Se `payment_status === 'pending'` e existe `payment_id`, buscar o access_token da `store_settings`
+- Fazer GET na API do MP (`/v1/payments/{payment_id}`)
+- Se o status do MP for "approved", atualizar o pedido no banco
+- Retornar o status atualizado
+
+**Checkout.tsx:**
+- Remover a chamada `supabase.functions.invoke` duplicada (linhas 182-186) que nao e usada
+- Manter apenas o `fetch` direto que ja funciona corretamente
