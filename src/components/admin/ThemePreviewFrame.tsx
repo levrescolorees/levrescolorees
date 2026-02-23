@@ -53,6 +53,7 @@ const ThemePreviewFrame = ({ draft }: ThemePreviewFrameProps) => {
   useEffect(() => {
     const handler = (e: MessageEvent) => {
       if (e.data?.type === 'THEME_PREVIEW_READY' && e.data?.channelId === channelId) {
+        if (import.meta.env.DEV) console.log('[ThemePreview] READY received', channelId);
         setIsReady(true);
       }
     };
@@ -60,23 +61,51 @@ const ThemePreviewFrame = ({ draft }: ThemePreviewFrameProps) => {
     return () => window.removeEventListener('message', handler);
   }, [channelId]);
 
-  // ── On iframe load, send INIT ──────────────────────────
+  // ── On iframe load, retry INIT until READY ─────────────
+  const retryRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const stopRetry = useCallback(() => {
+    if (retryRef.current) {
+      clearInterval(retryRef.current);
+      retryRef.current = null;
+    }
+  }, []);
+
+  // Stop retry once ready
+  useEffect(() => {
+    if (isReady) stopRetry();
+  }, [isReady, stopRetry]);
+
+  // Cleanup on unmount
+  useEffect(() => stopRetry, [stopRetry]);
+
   const handleIframeLoad = useCallback(() => {
     setIsReady(false);
-    const iframe = iframeRef.current;
-    if (!iframe?.contentWindow) return;
-    iframe.contentWindow.postMessage(
-      { type: 'THEME_PREVIEW_INIT', channelId },
-      '*'
-    );
-  }, [channelId]);
+    stopRetry();
+    const sendInit = () => {
+      const iframe = iframeRef.current;
+      if (!iframe?.contentWindow) return;
+      if (import.meta.env.DEV) console.log('[ThemePreview] sending INIT', channelId);
+      iframe.contentWindow.postMessage(
+        { type: 'THEME_PREVIEW_INIT', channelId },
+        '*'
+      );
+    };
+    // Send immediately + retry every 300ms until READY
+    sendInit();
+    retryRef.current = setInterval(sendInit, 300);
+  }, [channelId, stopRetry]);
 
   // ── Send draft whenever it changes & iframe is ready ───
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+
   useEffect(() => {
     const iframe = iframeRef.current;
     if (!iframe?.contentWindow || !isReady) return;
 
     if (draft) {
+      if (import.meta.env.DEV) console.log('[ThemePreview] sending APPLY_THEME_DRAFT');
       iframe.contentWindow.postMessage(
         { type: 'APPLY_THEME_DRAFT', channelId, theme: draft },
         '*'
@@ -88,19 +117,6 @@ const ThemePreviewFrame = ({ draft }: ThemePreviewFrameProps) => {
       );
     }
   }, [draft, isReady, channelId]);
-
-  // Also re-send draft right after ready flips to true
-  useEffect(() => {
-    if (!isReady || !draft) return;
-    const iframe = iframeRef.current;
-    if (!iframe?.contentWindow) return;
-    iframe.contentWindow.postMessage(
-      { type: 'APPLY_THEME_DRAFT', channelId, theme: draft },
-      '*'
-    );
-    // intentionally only on isReady change
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isReady]);
 
   const iframeHeight = 2400; // tall enough for full page scroll
 
