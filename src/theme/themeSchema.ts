@@ -69,6 +69,10 @@ export const themeSettingsSchema = z.object({
       visible: z.boolean(),
       text: z.string(),
     }),
+    images: z.object({
+      logo: z.string().optional().default(''),
+      heroBanner: z.string().optional().default(''),
+    }).optional().default({ logo: '', heroBanner: '' }),
   }),
   meta: z.object({
     updatedAt: z.string(),
@@ -107,6 +111,7 @@ export function migrateTheme(raw: any): ThemeSettings {
       },
       components: {
         topBar: { ...DEFAULT_THEME.components.topBar, ...raw.topBar },
+        images: { ...DEFAULT_THEME.components.images, ...raw.images },
       },
     });
     return migrated;
