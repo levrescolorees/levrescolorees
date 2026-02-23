@@ -12,8 +12,8 @@ const Header = () => {
 
   const brandName = settings?.brand?.name || 'Lèvres Colorées';
   const theme = settings?.theme as any;
-  const topBarVisible = theme?.topBar?.visible ?? true;
-  const topBarText = theme?.topBar?.text || 'FRETE GRÁTIS acima de R$299 • Compre no Atacado e economize até 40%';
+  const topBarVisible = theme?.components?.topBar?.visible ?? theme?.topBar?.visible ?? true;
+  const topBarText = theme?.components?.topBar?.text || theme?.topBar?.text || 'FRETE GRÁTIS acima de R$299 • Compre no Atacado e economize até 40%';
 
   const navLinks = [
     { to: '/', label: 'Home' },

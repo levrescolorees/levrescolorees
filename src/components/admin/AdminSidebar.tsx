@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, Package, FolderOpen, ShoppingCart,
-  Users, Tag, Settings, Image, LogOut, Plug
+  Users, Tag, Settings, Image, LogOut, Plug, Paintbrush
 } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import { useAuth } from '@/hooks/useAuth';
@@ -19,6 +19,7 @@ const navItems = [
   { title: 'Cupons', url: '/admin/cupons', icon: Tag },
   { title: 'Mídia', url: '/admin/midia', icon: Image },
   { title: 'Integrações', url: '/admin/integracoes', icon: Plug },
+  { title: 'Editor de Tema', url: '/admin/theme-editor', icon: Paintbrush },
   { title: 'Configurações', url: '/admin/configuracoes', icon: Settings },
 ];
 
