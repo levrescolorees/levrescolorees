@@ -1,39 +1,35 @@
 
-# Fix: Preview do Tema Nao Carrega no Iframe
 
-## Problema
+# Fix: iframe do preview bloqueado pelo Content-Security-Policy
 
-O iframe do preview carrega a URL `/?theme_preview=1` mas descarta o parametro `__lovable_token` da URL pai. Sem esse token, o ambiente de preview do Lovable nao serve o conteudo, resultando no iframe cinza/vazio.
+## Problema raiz
+
+O `index.html` define um header CSP com `frame-src https://*.mercadopago.com;` — isso significa que iframes so podem carregar URLs do Mercado Pago. O iframe do theme preview aponta para a propria origem (`window.location.origin`), que e bloqueado silenciosamente pelo navegador.
 
 ## Solucao
 
-Atualizar a construcao da URL do iframe para preservar parametros essenciais da URL pai (como `__lovable_token`), garantindo que o iframe consiga carregar a pagina normalmente.
+Adicionar `'self'` a diretiva `frame-src` no CSP do `index.html`.
 
 ## Implementacao
 
-### Arquivo: `src/components/admin/ThemePreviewFrame.tsx`
+### Arquivo: `index.html` (linha 10)
 
-1. Modificar o `useMemo` de `previewUrl` para copiar query params relevantes da URL pai:
-   - Ler `window.location.search` e copiar todos os parametros existentes (exceto os de rota do admin)
-   - Adicionar `theme_preview=1`
-   - Resultado: `/?theme_preview=1&__lovable_token=...`
-
-2. Quando `previewPage` mudar (navegacao interna), reconstruir a URL do iframe mantendo os mesmos parametros base
-
-### Mudanca de codigo (pseudocodigo)
-
-```typescript
-const previewUrl = useMemo(() => {
-  const base = window.location.origin;
-  const parentParams = new URLSearchParams(window.location.search);
-  const params = new URLSearchParams();
-  // Preserve env tokens
-  parentParams.forEach((value, key) => {
-    if (key !== 'theme_preview') params.set(key, value);
-  });
-  params.set('theme_preview', '1');
-  return `${base}/?${params.toString()}`;
-}, []);
+Alterar de:
+```text
+frame-src https://*.mercadopago.com;
 ```
 
-Essa mudanca e minima (apenas o bloco `useMemo` do `previewUrl`) e resolve o problema tanto no ambiente Lovable quanto em producao.
+Para:
+```text
+frame-src 'self' https://*.mercadopago.com;
+```
+
+Isso permite que iframes carreguem a propria origem (necessario para o preview do tema) e mantem o suporte ao Mercado Pago.
+
+### Nenhuma outra mudanca necessaria
+
+A logica do `ThemePreviewFrame.tsx` (preservacao de query params, handshake postMessage, envio de drafts) ja esta correta. O unico bloqueio era o CSP impedindo o iframe de carregar.
+
+## Risco
+
+Nenhum — adicionar `'self'` ao `frame-src` e pratica padrao e nao abre vulnerabilidades. A pagina ja permite scripts e estilos `'self'`.
