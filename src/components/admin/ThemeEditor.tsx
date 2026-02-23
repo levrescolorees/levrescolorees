@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Save, RotateCcw, Palette, Type, SlidersHorizontal, MessageSquare, Download, Upload, History, Check } from 'lucide-react';
+import { Save, RotateCcw, Palette, Type, SlidersHorizontal, MessageSquare, Download, Upload, History, Check, ImageIcon } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useStoreSettings } from '@/hooks/useStoreSettings';
@@ -17,6 +17,7 @@ import { Label } from '@/components/ui/label';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
+import ImageUploadRow from '@/components/admin/theme-editor/ImageUploadRow';
 
 // ─── Contrast Badge ────────────────────────────────────────
 function ContrastBadge({ fg, bg }: { fg: string; bg: string }) {
@@ -126,6 +127,10 @@ const ThemeEditor = ({ onDraftChange }: ThemeEditorProps) => {
     updateDraft({ ...draft, components: { ...draft.components, topBar: { ...draft.components.topBar, ...patch } } });
   };
 
+  const updateImage = (key: 'logo' | 'heroBanner', url: string) => {
+    updateDraft({ ...draft, components: { ...draft.components, images: { ...draft.components.images, [key]: url } } });
+  };
+
   const applyPreset = (preset: ThemeSettings) => {
     const next = { ...preset, revision: draft.revision, history: draft.history, meta: { ...preset.meta, updatedAt: draft.meta.updatedAt, updatedById: draft.meta.updatedById } };
     updateDraft(next);
@@ -214,7 +219,7 @@ const ThemeEditor = ({ onDraftChange }: ThemeEditorProps) => {
         </div>
       </section>
 
-      <Accordion type="multiple" defaultValue={['brand', 'bg', 'text', 'comp', 'fonts', 'radius', 'topbar']} className="space-y-3">
+      <Accordion type="multiple" defaultValue={['brand', 'bg', 'text', 'comp', 'fonts', 'radius', 'topbar', 'images']} className="space-y-3">
         {/* Brand Colors */}
         <AccordionItem value="brand" className="bg-card rounded-lg shadow-soft border-none">
           <AccordionTrigger className="px-5 py-4 font-display text-base font-semibold">
@@ -339,6 +344,29 @@ const ThemeEditor = ({ onDraftChange }: ThemeEditorProps) => {
                 <Input value={draft.components.topBar.text} onChange={e => updateTopBar({ text: e.target.value })} className="font-body mt-1" />
               </div>
             )}
+          </AccordionContent>
+        </AccordionItem>
+
+        {/* Images */}
+        <AccordionItem value="images" className="bg-card rounded-lg shadow-soft border-none">
+          <AccordionTrigger className="px-5 py-4 font-display text-base font-semibold">
+            <span className="flex items-center gap-2"><ImageIcon className="w-4 h-4" /> Imagens</span>
+          </AccordionTrigger>
+          <AccordionContent className="px-5 pb-5 space-y-5">
+            <ImageUploadRow
+              label="Logo da Marca"
+              description="Recomendado: PNG transparente, 400×100px"
+              value={draft.components.images?.logo || ''}
+              onChange={url => updateImage('logo', url)}
+              folder="logo"
+            />
+            <ImageUploadRow
+              label="Hero Banner"
+              description="Imagem principal da loja. Recomendado: 1920×800px"
+              value={draft.components.images?.heroBanner || ''}
+              onChange={url => updateImage('heroBanner', url)}
+              folder="hero"
+            />
           </AccordionContent>
         </AccordionItem>
       </Accordion>

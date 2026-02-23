@@ -21,6 +21,12 @@ interface ThemePreviewFrameProps {
   draft: ThemeSettings | null;
 }
 
+// Helper to get image URL or fallback
+const getImageUrl = (theme: ThemeSettings, key: 'logo' | 'heroBanner', fallback: string) => {
+  const url = theme.components.images?.[key];
+  return url && url.length > 0 ? url : fallback;
+};
+
 const COLOR_TO_CSS: Record<keyof ThemeColors, string> = {
   primary: '--primary',
   primary_light: '--rose-light',
@@ -71,14 +77,18 @@ const MockTopBar = ({ text }: { text: string }) => (
   </div>
 );
 
-const MockHeader = () => (
+const MockHeader = ({ logoUrl }: { logoUrl?: string }) => (
   <header className="w-full py-4 px-6 flex items-center justify-between"
     style={{ background: 'hsl(var(--background))', borderBottom: '1px solid hsl(var(--border))' }}>
     <div className="flex items-center gap-3">
       <Menu className="w-5 h-5" style={{ color: 'hsl(var(--foreground))' }} />
-      <span className="text-lg font-bold" style={{ fontFamily: 'var(--font-display)', color: 'hsl(var(--foreground))' }}>
-        Minha Loja
-      </span>
+      {logoUrl ? (
+        <img src={logoUrl} alt="Logo" className="h-8 max-w-[140px] object-contain" />
+      ) : (
+        <span className="text-lg font-bold" style={{ fontFamily: 'var(--font-display)', color: 'hsl(var(--foreground))' }}>
+          Minha Loja
+        </span>
+      )}
     </div>
     <nav className="hidden sm:flex items-center gap-4 text-sm" style={{ fontFamily: 'var(--font-body)', color: 'hsl(var(--muted-foreground))' }}>
       <span>Produtos</span>
@@ -93,10 +103,10 @@ const MockHeader = () => (
   </header>
 );
 
-const MockHero = () => (
+const MockHero = ({ heroUrl }: { heroUrl: string }) => (
   <section className="w-full py-20 px-6 text-center relative overflow-hidden"
     style={{ minHeight: 280 }}>
-    <img src={heroBanner} alt="" className="absolute inset-0 w-full h-full object-cover" />
+    <img src={heroUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
     <div className="absolute inset-0" style={{
       background: `linear-gradient(135deg, hsl(var(--primary) / 0.55), hsl(var(--rose-light) / 0.45))`,
     }} />
@@ -301,8 +311,8 @@ const ThemePreviewFrame = ({ draft }: ThemePreviewFrameProps) => {
             {/* Storefront mockup */}
             <div style={{ background: 'hsl(var(--background))' }}>
               {showTopBar && <MockTopBar text={theme.components.topBar.text} />}
-              <MockHeader />
-              <MockHero />
+              <MockHeader logoUrl={getImageUrl(theme, 'logo', '')} />
+              <MockHero heroUrl={getImageUrl(theme, 'heroBanner', heroBanner)} />
               <section className="px-6 py-8" style={{ background: 'hsl(var(--background))' }}>
                 <h2 className="text-lg font-bold mb-4 text-center"
                   style={{ fontFamily: 'var(--font-display)', color: 'hsl(var(--foreground))' }}>

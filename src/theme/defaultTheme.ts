@@ -37,8 +37,14 @@ export interface ThemeTopBar {
   text: string;
 }
 
+export interface ThemeImages {
+  logo: string;
+  heroBanner: string;
+}
+
 export interface ThemeComponents {
   topBar: ThemeTopBar;
+  images: ThemeImages;
 }
 
 export interface ThemeMeta {
@@ -101,6 +107,7 @@ export const DEFAULT_THEME: ThemeSettings = {
   },
   components: {
     topBar: { visible: true, text: 'FRETE GRÁTIS acima de R$299 • Compre no Atacado e economize até 40%' },
+    images: { logo: '', heroBanner: '' },
   },
   meta: {
     updatedAt: '',
