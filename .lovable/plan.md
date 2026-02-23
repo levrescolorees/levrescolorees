@@ -1,101 +1,39 @@
 
-Objetivo: fazer o botão “Mobile” do preview realmente aplicar layout mobile (breakpoints `md`, `lg`, etc.), porque hoje ele só reduz/escala um bloco dentro da mesma janela e não altera o viewport real usado pelas media queries.
+# Fix: Preview do Tema Nao Carrega no Iframe
 
-Contexto confirmado no código e no print:
-- O `ThemePreviewFrame` atual simula viewport com `width: 375` + `transform: scale(...)`.
-- Isso não muda `window.innerWidth` nem os breakpoints CSS do Tailwind.
-- Por isso, em “Mobile” ainda aparecem comportamentos desktop (ex.: navegação do `Header` com `md:flex`).
+## Problema
 
-Solução proposta (robusta): migrar o preview para `iframe` real
-- Um `iframe` possui viewport próprio.
-- Com largura 375, os breakpoints passam a responder como mobile de verdade.
-- O próprio projeto já tem infraestrutura pronta para isso em `ThemeProvider`:
-  - `theme_preview=1`
-  - handshake `THEME_PREVIEW_INIT` / `THEME_PREVIEW_READY`
-  - aplicação de draft via `APPLY_THEME_DRAFT`.
+O iframe do preview carrega a URL `/?theme_preview=1` mas descarta o parametro `__lovable_token` da URL pai. Sem esse token, o ambiente de preview do Lovable nao serve o conteudo, resultando no iframe cinza/vazio.
 
-Escopo de implementação
+## Solucao
 
-1) Reestruturar `ThemePreviewFrame` para renderizar `iframe` em vez de “storefront inline”
-Arquivo: `src/components/admin/ThemePreviewFrame.tsx`
-- Manter toolbar de viewport (Desktop/Tablet/Mobile).
-- Manter cálculo de escala e “spacer” para enquadrar o frame no painel.
-- Trocar conteúdo interno por:
-  - `<iframe ref=... src={previewUrl} ... />`
-  - largura fixa = viewport selecionado
-  - altura calculada para visualização confortável (com scroll no wrapper externo).
-- Remover imports de componentes de página inline (`Header`, `HeroBanner`, `Collections`, `Atacado`, etc.), pois o iframe carrega páginas reais.
-- Remover lógica de interceptação `onClickCapture`/`onSubmitCapture` no wrapper (não será mais necessária).
+Atualizar a construcao da URL do iframe para preservar parametros essenciais da URL pai (como `__lovable_token`), garantindo que o iframe consiga carregar a pagina normalmente.
 
-2) Navegação entre Home/Coleções/Atacado via URL do iframe
-Arquivo: `src/components/admin/ThemePreviewFrame.tsx`
-- Manter estado `previewPage` (home/collections/atacado) e mapear para path:
-  - home -> `/?theme_preview=1`
-  - collections -> `/colecoes?theme_preview=1`
-  - atacado -> `/atacado?theme_preview=1`
-- Para links “Mais Vendidos” e afins, suportar query de filtro quando vier da navegação interna do iframe.
-- Fluxo de navegação:
-  - Clique na toolbar ou links dentro do iframe altera apenas o iframe (não a página admin).
-- Para capturar navegação interna do iframe com mais confiabilidade:
-  - usar evento `load` e ler `iframe.contentWindow.location` (same-origin), sincronizando `previewPage` no estado do parent.
-  - fallback: quando não conseguir ler location, manter estado atual sem quebrar preview.
+## Implementacao
 
-3) Conectar draft do editor ao iframe via postMessage
-Arquivos:
-- `src/components/admin/ThemePreviewFrame.tsx`
-- `src/pages/admin/AdminThemeEditor.tsx` (ajuste mínimo se necessário)
-Passos:
-- Gerar `channelId` único no mount do preview.
-- No `load` do iframe, enviar `THEME_PREVIEW_INIT` com esse `channelId`.
-- Ouvir `window.message` e aguardar `THEME_PREVIEW_READY`.
-- Quando `draft` mudar:
-  - enviar `APPLY_THEME_DRAFT` para `iframe.contentWindow` com o mesmo `channelId`.
-- Se `draft` for `null`, enviar `RESET_THEME_TO_SAVED`.
-- Isso reaproveita 100% da lógica já existente no `ThemeProvider` sem duplicar injeção de CSS vars no parent.
+### Arquivo: `src/components/admin/ThemePreviewFrame.tsx`
 
-4) Ajuste de estabilidade para “filtro inicial” em Coleções
-Arquivo: `src/pages/Collections.tsx`
-- Preservar suporte de `initialFilter` já implementado.
-- Garantir compatibilidade com query string real (`/colecoes?filter=...`) dentro do iframe.
-- Regra final:
-  - prioridade de filtro: `initialFilter` (se vier por prop) -> query param -> `'all'`.
-- Como no iframe a rota é real, este componente já tende a funcionar naturalmente; só validaremos se há regressão.
+1. Modificar o `useMemo` de `previewUrl` para copiar query params relevantes da URL pai:
+   - Ler `window.location.search` e copiar todos os parametros existentes (exceto os de rota do admin)
+   - Adicionar `theme_preview=1`
+   - Resultado: `/?theme_preview=1&__lovable_token=...`
 
-5) Limpeza e compatibilidade
-Arquivos:
-- `src/components/admin/ThemePreviewFrame.tsx`
-- `src/components/admin/ThemeEditor.tsx` (somente se precisar alinhar callback do draft)
-- Remover lógica residual do preview inline que ficou obsoleta.
-- Garantir que preview continue:
-  - com scroll suave,
-  - com escala correta para caber no painel,
-  - sem navegar fora de `/admin/theme-editor`.
+2. Quando `previewPage` mudar (navegacao interna), reconstruir a URL do iframe mantendo os mesmos parametros base
 
-Sequência de execução recomendada
-1. Migrar render para iframe (estrutura visual primeiro).
-2. Implementar handshake/mensageria do tema draft.
-3. Sincronizar navegação iframe <-> estado da toolbar.
-4. Validar Coleções/Atacado/Mais Vendidos.
-5. Limpar código antigo e revisar imports.
+### Mudanca de codigo (pseudocodigo)
 
-Critérios de aceite
-- Ao selecionar “Mobile (375px)”, layout muda para mobile real:
-  - Header mostra comportamento mobile (menu ícone),
-  - espaçamentos/tipografia `md:` deixam de aplicar.
-- Clicar “Coleções”, “Mais Vendidos”, “Atacado” funciona no preview.
-- Alterar cores/fontes no editor atualiza o iframe em tempo real.
-- Nenhuma navegação do preview derruba a tela admin.
-- Desktop e Tablet continuam funcionando.
+```typescript
+const previewUrl = useMemo(() => {
+  const base = window.location.origin;
+  const parentParams = new URLSearchParams(window.location.search);
+  const params = new URLSearchParams();
+  // Preserve env tokens
+  parentParams.forEach((value, key) => {
+    if (key !== 'theme_preview') params.set(key, value);
+  });
+  params.set('theme_preview', '1');
+  return `${base}/?${params.toString()}`;
+}, []);
+```
 
-Riscos e mitigação
-- Risco: sincronização de mensagens antes do iframe estar pronto.
-  - Mitigação: usar handshake explícito + estado `isPreviewReady`.
-- Risco: perda de altura correta do conteúdo.
-  - Mitigação: manter wrapper com scroll externo e altura fixa de frame (ex.: viewport visual disponível), evitando depender de medir conteúdo interno cross-document.
-- Risco: filtros de coleção divergirem entre link e estado.
-  - Mitigação: centralizar filtro em query da rota dentro do iframe e simplificar estado no parent.
-
-Impacto esperado
-- Resolve definitivamente o problema “modo mobile não respeita mobile”.
-- Remove hacks de simulação de viewport por transform para responsividade.
-- Deixa o preview mais fiel ao storefront real, reduzindo bugs futuros de breakpoint.
+Essa mudanca e minima (apenas o bloco `useMemo` do `previewUrl`) e resolve o problema tanto no ambiente Lovable quanto em producao.
