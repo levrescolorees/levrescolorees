@@ -80,6 +80,7 @@ const ThemePreviewFrame = ({ draft }: ThemePreviewFrameProps) => {
   const [scale, setScale] = useState(1);
   const [contentHeight, setContentHeight] = useState(800);
   const [previewPage, setPreviewPage] = useState<PreviewPage>('home');
+  const [previewCollectionFilter, setPreviewCollectionFilter] = useState<string | null>(null);
 
   const theme = draft || DEFAULT_THEME;
 
@@ -164,16 +165,29 @@ const ThemePreviewFrame = ({ draft }: ThemePreviewFrameProps) => {
               onClickCapture={(e) => {
                 const target = e.target as HTMLElement;
                 const anchor = target.closest('a');
-                if (anchor) {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  // Use pathname + getAttribute for reliability with react-router links
-                  const pathname = anchor.pathname || '';
-                  const href = anchor.getAttribute('href') || '';
-                  const check = pathname + ' ' + href;
-                  if (check.includes('/colecoes')) setPreviewPage('collections');
-                  else if (check.includes('/atacado')) setPreviewPage('atacado');
-                  else if (pathname === '/' || href === '/') setPreviewPage('home');
+                if (!anchor) return;
+
+                e.preventDefault();
+                e.stopPropagation();
+
+                try {
+                  const rawHref = anchor.getAttribute('href') || anchor.href || '';
+                  const parsed = new URL(rawHref, window.location.origin);
+                  const pathname = parsed.pathname.toLowerCase();
+                  const filter = parsed.searchParams.get('filter');
+
+                  if (pathname === '/colecoes') {
+                    setPreviewCollectionFilter(filter);
+                    setPreviewPage('collections');
+                  } else if (pathname === '/atacado') {
+                    setPreviewCollectionFilter(null);
+                    setPreviewPage('atacado');
+                  } else if (pathname === '/') {
+                    setPreviewCollectionFilter(null);
+                    setPreviewPage('home');
+                  }
+                } catch {
+                  // Ignore malformed hrefs in preview
                 }
               }}
               onSubmitCapture={(e) => { e.preventDefault(); e.stopPropagation(); }}
@@ -191,7 +205,12 @@ const ThemePreviewFrame = ({ draft }: ThemePreviewFrameProps) => {
                   <Footer />
                 </>
               )}
-              {previewPage === 'collections' && <Collections />}
+              {previewPage === 'collections' && (
+                <Collections
+                  key={`preview-collections-${previewCollectionFilter ?? 'all'}`}
+                  initialFilter={previewCollectionFilter}
+                />
+              )}
               {previewPage === 'atacado' && <Atacado />}
             </div>
           </div>

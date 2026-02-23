@@ -14,10 +14,15 @@ const priceRanges = [
   { label: 'R$40+', min: 40, max: Infinity },
 ];
 
-const Collections = () => {
+interface CollectionsProps {
+  initialFilter?: string | null;
+}
+
+const Collections = ({ initialFilter = null }: CollectionsProps) => {
   const [searchParams] = useSearchParams();
   const filterParam = searchParams.get('filter');
-  const [activeCollection, setActiveCollection] = useState(filterParam || 'all');
+  const resolvedInitialFilter = initialFilter ?? filterParam ?? 'all';
+  const [activeCollection, setActiveCollection] = useState(resolvedInitialFilter);
   const [activePriceRange, setActivePriceRange] = useState(0);
 
   const { data: products, isLoading } = useStorefrontProducts();
