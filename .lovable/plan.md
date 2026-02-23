@@ -1,58 +1,101 @@
 
-# Preview com Navegacao entre Paginas
+Objetivo: fazer o botão “Mobile” do preview realmente aplicar layout mobile (breakpoints `md`, `lg`, etc.), porque hoje ele só reduz/escala um bloco dentro da mesma janela e não altera o viewport real usado pelas media queries.
 
-## Problema
+Contexto confirmado no código e no print:
+- O `ThemePreviewFrame` atual simula viewport com `width: 375` + `transform: scale(...)`.
+- Isso não muda `window.innerWidth` nem os breakpoints CSS do Tailwind.
+- Por isso, em “Mobile” ainda aparecem comportamentos desktop (ex.: navegação do `Header` com `md:flex`).
 
-Ao clicar nos links de navegacao (Colecoes, Atacado, etc.) no preview do tema, nada acontece porque o handler bloqueia todos os cliques em `<a>`.
+Solução proposta (robusta): migrar o preview para `iframe` real
+- Um `iframe` possui viewport próprio.
+- Com largura 375, os breakpoints passam a responder como mobile de verdade.
+- O próprio projeto já tem infraestrutura pronta para isso em `ThemeProvider`:
+  - `theme_preview=1`
+  - handshake `THEME_PREVIEW_INIT` / `THEME_PREVIEW_READY`
+  - aplicação de draft via `APPLY_THEME_DRAFT`.
 
-## Solucao
+Escopo de implementação
 
-Adicionar um estado `previewPage` ao `ThemePreviewFrame` que controla qual "pagina" esta sendo exibida no preview. Quando o usuario clica em um link de navegacao, em vez de navegar de verdade, interceptamos o clique, lemos o `href` do link e trocamos o conteudo renderizado para os componentes da pagina correspondente.
+1) Reestruturar `ThemePreviewFrame` para renderizar `iframe` em vez de “storefront inline”
+Arquivo: `src/components/admin/ThemePreviewFrame.tsx`
+- Manter toolbar de viewport (Desktop/Tablet/Mobile).
+- Manter cálculo de escala e “spacer” para enquadrar o frame no painel.
+- Trocar conteúdo interno por:
+  - `<iframe ref=... src={previewUrl} ... />`
+  - largura fixa = viewport selecionado
+  - altura calculada para visualização confortável (com scroll no wrapper externo).
+- Remover imports de componentes de página inline (`Header`, `HeroBanner`, `Collections`, `Atacado`, etc.), pois o iframe carrega páginas reais.
+- Remover lógica de interceptação `onClickCapture`/`onSubmitCapture` no wrapper (não será mais necessária).
 
-## Paginas suportadas no preview
+2) Navegação entre Home/Coleções/Atacado via URL do iframe
+Arquivo: `src/components/admin/ThemePreviewFrame.tsx`
+- Manter estado `previewPage` (home/collections/atacado) e mapear para path:
+  - home -> `/?theme_preview=1`
+  - collections -> `/colecoes?theme_preview=1`
+  - atacado -> `/atacado?theme_preview=1`
+- Para links “Mais Vendidos” e afins, suportar query de filtro quando vier da navegação interna do iframe.
+- Fluxo de navegação:
+  - Clique na toolbar ou links dentro do iframe altera apenas o iframe (não a página admin).
+- Para capturar navegação interna do iframe com mais confiabilidade:
+  - usar evento `load` e ler `iframe.contentWindow.location` (same-origin), sincronizando `previewPage` no estado do parent.
+  - fallback: quando não conseguir ler location, manter estado atual sem quebrar preview.
 
-| Link clicado | Rota | Conteudo renderizado |
-|---|---|---|
-| Home | `/` | HeroBanner + BenefitsSection + FeaturedProducts + SmartPricingSection + CollectionsSection + TestimonialsSection + FinalCTA |
-| Colecoes / Mais Vendidos / Novidades | `/colecoes` | Pagina Collections (filtros + grid de produtos) |
-| Atacado | `/atacado` | Pagina Atacado (hero atacado + beneficios + boxes + produtos) |
+3) Conectar draft do editor ao iframe via postMessage
+Arquivos:
+- `src/components/admin/ThemePreviewFrame.tsx`
+- `src/pages/admin/AdminThemeEditor.tsx` (ajuste mínimo se necessário)
+Passos:
+- Gerar `channelId` único no mount do preview.
+- No `load` do iframe, enviar `THEME_PREVIEW_INIT` com esse `channelId`.
+- Ouvir `window.message` e aguardar `THEME_PREVIEW_READY`.
+- Quando `draft` mudar:
+  - enviar `APPLY_THEME_DRAFT` para `iframe.contentWindow` com o mesmo `channelId`.
+- Se `draft` for `null`, enviar `RESET_THEME_TO_SAVED`.
+- Isso reaproveita 100% da lógica já existente no `ThemeProvider` sem duplicar injeção de CSS vars no parent.
 
-## Implementacao
+4) Ajuste de estabilidade para “filtro inicial” em Coleções
+Arquivo: `src/pages/Collections.tsx`
+- Preservar suporte de `initialFilter` já implementado.
+- Garantir compatibilidade com query string real (`/colecoes?filter=...`) dentro do iframe.
+- Regra final:
+  - prioridade de filtro: `initialFilter` (se vier por prop) -> query param -> `'all'`.
+- Como no iframe a rota é real, este componente já tende a funcionar naturalmente; só validaremos se há regressão.
 
-### `src/components/admin/ThemePreviewFrame.tsx`
+5) Limpeza e compatibilidade
+Arquivos:
+- `src/components/admin/ThemePreviewFrame.tsx`
+- `src/components/admin/ThemeEditor.tsx` (somente se precisar alinhar callback do draft)
+- Remover lógica residual do preview inline que ficou obsoleta.
+- Garantir que preview continue:
+  - com scroll suave,
+  - com escala correta para caber no painel,
+  - sem navegar fora de `/admin/theme-editor`.
 
-1. Adicionar estado `previewPage` com valor inicial `'home'`
-2. No `onClickCapture`, quando detectar um `<a>`, ler o `href`:
-   - Se contem `/colecoes` -> `setPreviewPage('collections')`
-   - Se contem `/atacado` -> `setPreviewPage('atacado')`
-   - Se e `/` (home) -> `setPreviewPage('home')`
-   - Sempre chamar `e.preventDefault()` e `e.stopPropagation()`
-3. Criar um componente interno `PreviewContent` que renderiza os componentes corretos baseado no `previewPage`
-4. Importar os componentes das paginas Collections e Atacado (apenas o conteudo interno, sem Header/Footer duplicados)
+Sequência de execução recomendada
+1. Migrar render para iframe (estrutura visual primeiro).
+2. Implementar handshake/mensageria do tema draft.
+3. Sincronizar navegação iframe <-> estado da toolbar.
+4. Validar Coleções/Atacado/Mais Vendidos.
+5. Limpar código antigo e revisar imports.
 
-### Componentes de conteudo por pagina
+Critérios de aceite
+- Ao selecionar “Mobile (375px)”, layout muda para mobile real:
+  - Header mostra comportamento mobile (menu ícone),
+  - espaçamentos/tipografia `md:` deixam de aplicar.
+- Clicar “Coleções”, “Mais Vendidos”, “Atacado” funciona no preview.
+- Alterar cores/fontes no editor atualiza o iframe em tempo real.
+- Nenhuma navegação do preview derruba a tela admin.
+- Desktop e Tablet continuam funcionando.
 
-Como as paginas `Collections` e `Atacado` incluem `Header` e `Footer` internamente, vamos extrair apenas o conteudo do `<main>` dessas paginas criando versoes "inline" simplificadas diretamente no ThemePreviewFrame, ou importar as paginas completas e deixar o Header/Footer duplicar (menos ideal).
+Riscos e mitigação
+- Risco: sincronização de mensagens antes do iframe estar pronto.
+  - Mitigação: usar handshake explícito + estado `isPreviewReady`.
+- Risco: perda de altura correta do conteúdo.
+  - Mitigação: manter wrapper com scroll externo e altura fixa de frame (ex.: viewport visual disponível), evitando depender de medir conteúdo interno cross-document.
+- Risco: filtros de coleção divergirem entre link e estado.
+  - Mitigação: centralizar filtro em query da rota dentro do iframe e simplificar estado no parent.
 
-A abordagem mais limpa: importar as paginas completas mas esconder o Header/Footer duplicado via CSS, ou melhor, criar componentes de conteudo separados. Porem, para simplicidade e velocidade, vamos renderizar as paginas inteiras - o Header no topo do preview ja serve como navegacao funcional, e as paginas incluem seu proprio Header que ficara visivel no scroll.
-
-**Abordagem escolhida**: Renderizar o conteudo completo de cada pagina (Collections, Atacado) dentro do preview. O Header e Footer ja fazem parte dessas paginas. Como o preview mostra a pagina inteira como o usuario final veria, isso e o comportamento correto.
-
-## Secao Tecnica
-
-### Arquivo modificado
-
-```text
-src/components/admin/ThemePreviewFrame.tsx
-```
-
-### Mudancas de codigo
-
-- Novo state: `const [previewPage, setPreviewPage] = useState<'home' | 'collections' | 'atacado'>('home')`
-- Importar `Collections` de `@/pages/Collections` e `Atacado` de `@/pages/Atacado`
-- Handler `onClickCapture` atualizado para ler `href` do anchor e mudar `previewPage`
-- Renderizacao condicional: se `home`, mostra os componentes atuais; se `collections`, mostra `<Collections />`; se `atacado`, mostra `<Atacado />`
-
-### Problema potencial: react-router
-
-As paginas `Collections` e `Atacado` usam `useSearchParams` e `Link` que dependem do Router context. Como o admin ja esta dentro do `BrowserRouter`, isso funciona. Porem, `useSearchParams` vai ler os params da URL real (`/admin/theme-editor`), nao da pagina simulada. Para Collections com filtros, os filtros internos (botoes de colecao/preco) funcionam via state local, entao nao ha problema.
+Impacto esperado
+- Resolve definitivamente o problema “modo mobile não respeita mobile”.
+- Remove hacks de simulação de viewport por transform para responsividade.
+- Deixa o preview mais fiel ao storefront real, reduzindo bugs futuros de breakpoint.
