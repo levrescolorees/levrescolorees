@@ -16,6 +16,10 @@ import TestimonialsSection from '@/components/TestimonialsSection';
 import FinalCTA from '@/components/FinalCTA';
 import Footer from '@/components/Footer';
 
+// Full pages for preview navigation
+import Collections from '@/pages/Collections';
+import Atacado from '@/pages/Atacado';
+
 const VIEWPORTS = [
   { label: 'Desktop', width: 1280, icon: Monitor },
   { label: 'Tablet', width: 768, icon: Tablet },
@@ -67,12 +71,15 @@ function buildScopedStyle(theme: ThemeSettings): React.CSSProperties {
   return style as unknown as React.CSSProperties;
 }
 
+type PreviewPage = 'home' | 'collections' | 'atacado';
+
 const ThemePreviewFrame = ({ draft }: ThemePreviewFrameProps) => {
   const contentRef = useRef<HTMLDivElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [viewport, setViewport] = useState(1280);
   const [scale, setScale] = useState(1);
   const [contentHeight, setContentHeight] = useState(800);
+  const [previewPage, setPreviewPage] = useState<PreviewPage>('home');
 
   const theme = draft || DEFAULT_THEME;
 
@@ -157,19 +164,32 @@ const ThemePreviewFrame = ({ draft }: ThemePreviewFrameProps) => {
               onClickCapture={(e) => {
                 const target = e.target as HTMLElement;
                 const anchor = target.closest('a');
-                if (anchor) { e.preventDefault(); e.stopPropagation(); }
+                if (anchor) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  const href = anchor.getAttribute('href') || '';
+                  if (href.includes('/colecoes')) setPreviewPage('collections');
+                  else if (href.includes('/atacado')) setPreviewPage('atacado');
+                  else if (href === '/' || href === '') setPreviewPage('home');
+                }
               }}
               onSubmitCapture={(e) => { e.preventDefault(); e.stopPropagation(); }}
             >
-              <Header />
-              <HeroBanner />
-              <BenefitsSection />
-              <FeaturedProducts />
-              <SmartPricingSection />
-              <CollectionsSection />
-              <TestimonialsSection />
-              <FinalCTA />
-              <Footer />
+              {previewPage === 'home' && (
+                <>
+                  <Header />
+                  <HeroBanner />
+                  <BenefitsSection />
+                  <FeaturedProducts />
+                  <SmartPricingSection />
+                  <CollectionsSection />
+                  <TestimonialsSection />
+                  <FinalCTA />
+                  <Footer />
+                </>
+              )}
+              {previewPage === 'collections' && <Collections />}
+              {previewPage === 'atacado' && <Atacado />}
             </div>
           </div>
         </div>
