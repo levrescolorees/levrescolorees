@@ -154,7 +154,12 @@ const ThemePreviewFrame = ({ draft }: ThemePreviewFrameProps) => {
           >
             {/* Real storefront rendered with draft CSS vars, interactions disabled */}
             <div
-              onClickCapture={(e) => { e.preventDefault(); e.stopPropagation(); }}
+              onClickCapture={(e) => {
+                const target = e.target as HTMLElement;
+                const anchor = target.closest('a');
+                if (anchor) { e.preventDefault(); e.stopPropagation(); }
+              }}
+              onSubmitCapture={(e) => { e.preventDefault(); e.stopPropagation(); }}
             >
               <Header />
               <HeroBanner />
