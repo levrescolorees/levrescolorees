@@ -5,6 +5,12 @@ import type { ThemeSettings } from '@/theme/defaultTheme';
 import { DEFAULT_THEME, type ThemeColors } from '@/theme/defaultTheme';
 import { getFontFamily, loadFont } from '@/theme/fontMap';
 
+// Asset imports
+import heroBanner from '@/assets/hero-banner.jpg';
+import box06 from '@/assets/box-06.jpg';
+import box12 from '@/assets/box-12.jpg';
+import lipgloss from '@/assets/collection-lipgloss.jpg';
+
 const VIEWPORTS = [
   { label: 'Desktop', width: 1280, icon: Monitor },
   { label: 'Tablet', width: 768, icon: Tablet },
@@ -15,7 +21,6 @@ interface ThemePreviewFrameProps {
   draft: ThemeSettings | null;
 }
 
-// Map theme tokens to CSS custom properties for scoped application
 const COLOR_TO_CSS: Record<keyof ThemeColors, string> = {
   primary: '--primary',
   primary_light: '--rose-light',
@@ -89,38 +94,51 @@ const MockHeader = () => (
 );
 
 const MockHero = () => (
-  <section className="w-full py-16 px-6 text-center"
-    style={{ background: `linear-gradient(135deg, hsl(var(--primary) / 0.08), hsl(var(--rose-light) / 0.12))` }}>
-    <h1 className="text-3xl font-bold mb-3"
-      style={{ fontFamily: 'var(--font-display)', color: 'hsl(var(--foreground))' }}>
-      Beleza que Transforma
-    </h1>
-    <p className="text-sm mb-6 max-w-md mx-auto"
-      style={{ fontFamily: 'var(--font-body)', color: 'hsl(var(--muted-foreground))' }}>
-      Descubra nossa linha completa de cosméticos premium com ingredientes naturais.
-    </p>
-    <button className="px-6 py-2.5 text-sm font-semibold transition-colors"
-      style={{
-        background: 'hsl(var(--primary))',
-        color: 'hsl(var(--primary-foreground))',
-        borderRadius: 'var(--radius)',
-        fontFamily: 'var(--font-body)',
-      }}>
-      Ver Produtos
-    </button>
+  <section className="w-full py-20 px-6 text-center relative overflow-hidden"
+    style={{ minHeight: 280 }}>
+    <img src={heroBanner} alt="" className="absolute inset-0 w-full h-full object-cover" />
+    <div className="absolute inset-0" style={{
+      background: `linear-gradient(135deg, hsl(var(--primary) / 0.55), hsl(var(--rose-light) / 0.45))`,
+    }} />
+    <div className="relative z-10">
+      <h1 className="text-3xl font-bold mb-3"
+        style={{ fontFamily: 'var(--font-display)', color: 'hsl(var(--primary-foreground))' }}>
+        Beleza que Transforma
+      </h1>
+      <p className="text-sm mb-6 max-w-md mx-auto"
+        style={{ fontFamily: 'var(--font-body)', color: 'hsl(var(--primary-foreground) / 0.85)' }}>
+        Descubra nossa linha completa de cosméticos premium com ingredientes naturais.
+      </p>
+      <button className="px-6 py-2.5 text-sm font-semibold transition-colors"
+        style={{
+          background: 'hsl(var(--primary))',
+          color: 'hsl(var(--primary-foreground))',
+          borderRadius: 'var(--radius)',
+          fontFamily: 'var(--font-body)',
+        }}>
+        Ver Produtos
+      </button>
+    </div>
   </section>
 );
 
-const MockProductCard = ({ name, price }: { name: string; price: string }) => (
+const PRODUCT_IMAGES = [box06, box12, lipgloss];
+
+const MockProductCard = ({ name, price, imageIndex }: { name: string; price: string; imageIndex: number }) => (
   <div className="flex flex-col overflow-hidden"
     style={{
       background: 'hsl(var(--card))',
       borderRadius: 'var(--radius)',
       border: '1px solid hsl(var(--border))',
     }}>
-    <div className="aspect-square relative" style={{ background: 'hsl(var(--muted))' }}>
+    <div className="aspect-square relative overflow-hidden" style={{ background: 'hsl(var(--muted))' }}>
+      <img
+        src={PRODUCT_IMAGES[imageIndex % PRODUCT_IMAGES.length]}
+        alt={name}
+        className="w-full h-full object-cover"
+      />
       <div className="absolute top-2 right-2">
-        <Heart className="w-4 h-4" style={{ color: 'hsl(var(--muted-foreground))' }} />
+        <Heart className="w-4 h-4" style={{ color: 'hsl(var(--primary-foreground))' }} />
       </div>
       <div className="absolute bottom-2 left-2 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider"
         style={{
@@ -193,10 +211,11 @@ const MockFooter = () => (
 // ─── Main Component ───────────────────────────────────────
 
 const ThemePreviewFrame = ({ draft }: ThemePreviewFrameProps) => {
-  const containerRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [viewport, setViewport] = useState(1280);
   const [scale, setScale] = useState(1);
+  const [contentHeight, setContentHeight] = useState(800);
 
   const theme = draft || DEFAULT_THEME;
 
@@ -206,11 +225,11 @@ const ThemePreviewFrame = ({ draft }: ThemePreviewFrameProps) => {
     loadFont(theme.tokens.fonts.body);
   }, [theme.tokens.fonts.display, theme.tokens.fonts.body]);
 
-  // Calculate scale
+  // Calculate scale based on available width
   const updateScale = useCallback(() => {
     const wrapper = wrapperRef.current;
     if (!wrapper) return;
-    const available = wrapper.clientWidth - 32; // padding
+    const available = wrapper.clientWidth - 32;
     const s = Math.min(1, available / viewport);
     setScale(s);
   }, [viewport]);
@@ -221,9 +240,25 @@ const ThemePreviewFrame = ({ draft }: ThemePreviewFrameProps) => {
     return () => window.removeEventListener('resize', updateScale);
   }, [updateScale]);
 
-  const scopedStyle = useMemo(() => buildScopedStyle(theme), [theme]);
+  // Observe content height for proper scroll sizing
+  useEffect(() => {
+    const el = contentRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setContentHeight(entry.contentRect.height);
+      }
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
+  const scopedStyle = useMemo(() => buildScopedStyle(theme), [theme]);
   const showTopBar = theme.components.topBar.visible;
+
+  // Spacer dimensions so overflow-auto works correctly with scaled content
+  const spacerWidth = viewport * scale;
+  const spacerHeight = contentHeight * scale;
 
   return (
     <div className="flex flex-col h-full">
@@ -246,37 +281,42 @@ const ThemePreviewFrame = ({ draft }: ThemePreviewFrameProps) => {
         </span>
       </div>
 
-      {/* Preview area */}
+      {/* Preview area with proper scroll */}
       <div ref={wrapperRef} className="flex-1 overflow-auto bg-muted/20 flex justify-center p-4">
-        <div
-          ref={containerRef}
-          style={{
-            ...scopedStyle,
-            width: viewport,
-            transformOrigin: 'top center',
-            transform: `scale(${scale})`,
-          }}
-          className="shadow-lg border border-border rounded-lg overflow-hidden"
-        >
-          {/* Storefront mockup */}
-          <div style={{ background: 'hsl(var(--background))' }}>
-            {showTopBar && <MockTopBar text={theme.components.topBar.text} />}
-            <MockHeader />
-            <MockHero />
-            {/* Products grid */}
-            <section className="px-6 py-8" style={{ background: 'hsl(var(--background))' }}>
-              <h2 className="text-lg font-bold mb-4 text-center"
-                style={{ fontFamily: 'var(--font-display)', color: 'hsl(var(--foreground))' }}>
-                Produtos em Destaque
-              </h2>
-              <div className={`grid gap-4 ${viewport <= 375 ? 'grid-cols-2' : 'grid-cols-3'}`}>
-                <MockProductCard name="Batom Velvet Rose" price="R$ 89,90" />
-                <MockProductCard name="Sérum Vitamina C" price="R$ 129,90" />
-                {viewport > 375 && <MockProductCard name="Paleta de Sombras" price="R$ 159,90" />}
-              </div>
-            </section>
-            <MockCTA />
-            <MockFooter />
+        {/* Spacer div with explicit dimensions so scroll works */}
+        <div style={{ width: spacerWidth, height: spacerHeight, position: 'relative', flexShrink: 0 }}>
+          <div
+            ref={contentRef}
+            style={{
+              ...scopedStyle,
+              width: viewport,
+              transformOrigin: 'top left',
+              transform: `scale(${scale})`,
+              position: 'absolute',
+              top: 0,
+              left: 0,
+            }}
+            className="shadow-lg border border-border rounded-lg overflow-hidden"
+          >
+            {/* Storefront mockup */}
+            <div style={{ background: 'hsl(var(--background))' }}>
+              {showTopBar && <MockTopBar text={theme.components.topBar.text} />}
+              <MockHeader />
+              <MockHero />
+              <section className="px-6 py-8" style={{ background: 'hsl(var(--background))' }}>
+                <h2 className="text-lg font-bold mb-4 text-center"
+                  style={{ fontFamily: 'var(--font-display)', color: 'hsl(var(--foreground))' }}>
+                  Produtos em Destaque
+                </h2>
+                <div className={`grid gap-4 ${viewport <= 375 ? 'grid-cols-2' : 'grid-cols-3'}`}>
+                  <MockProductCard name="Batom Velvet Rose" price="R$ 89,90" imageIndex={0} />
+                  <MockProductCard name="Sérum Vitamina C" price="R$ 129,90" imageIndex={1} />
+                  {viewport > 375 && <MockProductCard name="Paleta de Sombras" price="R$ 159,90" imageIndex={2} />}
+                </div>
+              </section>
+              <MockCTA />
+              <MockFooter />
+            </div>
           </div>
         </div>
       </div>
