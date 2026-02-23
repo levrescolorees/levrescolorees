@@ -359,6 +359,7 @@ const ThemeEditor = ({ onDraftChange }: ThemeEditorProps) => {
               value={draft.components.images?.logo || ''}
               onChange={url => updateImage('logo', url)}
               folder="logo"
+              aspect={4}
             />
             <ImageUploadRow
               label="Hero Banner"
@@ -366,6 +367,7 @@ const ThemeEditor = ({ onDraftChange }: ThemeEditorProps) => {
               value={draft.components.images?.heroBanner || ''}
               onChange={url => updateImage('heroBanner', url)}
               folder="hero"
+              aspect={1920 / 800}
             />
           </AccordionContent>
         </AccordionItem>
