@@ -167,10 +167,13 @@ const ThemePreviewFrame = ({ draft }: ThemePreviewFrameProps) => {
                 if (anchor) {
                   e.preventDefault();
                   e.stopPropagation();
+                  // Use pathname + getAttribute for reliability with react-router links
+                  const pathname = anchor.pathname || '';
                   const href = anchor.getAttribute('href') || '';
-                  if (href.includes('/colecoes')) setPreviewPage('collections');
-                  else if (href.includes('/atacado')) setPreviewPage('atacado');
-                  else if (href === '/' || href === '') setPreviewPage('home');
+                  const check = pathname + ' ' + href;
+                  if (check.includes('/colecoes')) setPreviewPage('collections');
+                  else if (check.includes('/atacado')) setPreviewPage('atacado');
+                  else if (pathname === '/' || href === '/') setPreviewPage('home');
                 }
               }}
               onSubmitCapture={(e) => { e.preventDefault(); e.stopPropagation(); }}
