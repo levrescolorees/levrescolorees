@@ -114,8 +114,10 @@ const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
 
     const handleMessage = (e: MessageEvent) => {
       const { type, channelId, theme: msgTheme } = e.data || {};
+      // Always respond to INIT (even if already paired) to support retries
       if (type === 'THEME_PREVIEW_INIT' && channelId) {
         channelIdRef.current = channelId;
+        if (import.meta.env.DEV) console.log('[ThemeProvider] responding READY', channelId);
         window.parent.postMessage({ type: 'THEME_PREVIEW_READY', channelId }, '*');
       }
       if (type === 'APPLY_THEME_DRAFT' && channelId === channelIdRef.current && msgTheme) {
