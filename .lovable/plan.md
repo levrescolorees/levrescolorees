@@ -1,75 +1,81 @@
 
-Objetivo: fazer a logo enviada no Editor de Tema aparecer imediatamente no preview (iframe) e também no storefront salvo, sem quebrar o comportamento atual de fallback para nome da marca em texto.
+Objetivo
+Corrigir de forma definitiva o caso em que a logo enviada no Editor de Tema “às vezes” não aparece no preview do iframe, mesmo aparecendo no card de upload.
 
-Diagnóstico baseado no código atual:
+Diagnóstico (com base no código atual + screenshot)
+1) O pipeline de render da logo já existe:
+- `ThemeEditor` grava em `draft.components.images.logo`.
+- `ThemePreviewFrame` envia draft por `postMessage`.
+- `ThemeProvider` no iframe recebe draft e expõe `theme`.
+- `Header` renderiza `<img src={logoUrl} ...>` quando `logoUrl` existe.
 
-1) A imagem de logo é salva no draft corretamente
-- `ThemeEditor.tsx` atualiza `draft.components.images.logo` via `updateImage`.
-- `ThemePreviewFrame.tsx` envia o draft para o iframe via `postMessage(APPLY_THEME_DRAFT)`.
+2) O ponto frágil está no handshake do iframe:
+- Em `ThemePreviewFrame`, o `THEME_PREVIEW_INIT` é enviado apenas 1 vez no `onLoad`.
+- Se o listener do `ThemeProvider` ainda não estiver registrado naquele exato momento, a mensagem se perde.
+- Sem `THEME_PREVIEW_READY`, `isReady` não sobe, e o draft não é reenviado.
+- Isso explica comportamento intermitente (“problema novamente”).
 
-2) O preview dentro do iframe recebe o draft, mas os componentes visuais não consomem esse draft
-- `ThemeProvider.tsx` aplica apenas CSS variables; os componentes não leem imagem da logo por ele.
-- O `ThemeContext` expõe `theme` (salvo), não o tema ativo (`previewTheme || theme`), então mesmo usando contexto hoje a UI não receberia sempre o draft certo.
+3) O screenshot é compatível com falha de sincronização:
+- O card de upload mostra a imagem no painel esquerdo.
+- O preview da direita continua sem refletir draft da logo.
 
-3) A logo não é renderizada no Header
-- `Header.tsx` renderiza somente texto (`brandName`) e não usa `theme.components.images.logo`.
-- Portanto, mesmo com upload/salvamento, não existe elemento visual para a logo aparecer.
+Escopo da correção
+1. Tornar handshake resiliente em `ThemePreviewFrame`
+- Manter `channelId` estável.
+- Implementar retry automático de `THEME_PREVIEW_INIT` até receber `THEME_PREVIEW_READY`:
+  - iniciar tentativa no `onLoad`;
+  - repetir em intervalo curto (ex.: 250–400ms) enquanto `isReady === false`;
+  - parar imediatamente quando `isReady` ficar `true`;
+  - limpar intervalo em unmount/troca de navegação.
+- Isso elimina dependência de timing entre `onLoad` e `useEffect` do iframe.
 
-4) O Hero também não usa imagem customizada
-- `HeroBanner.tsx` usa asset estático `hero-banner.jpg` e ignora `theme.components.images.heroBanner`.
-- Isso confirma que o pipeline de imagens do tema ainda não está conectado aos componentes da vitrine.
+2. Garantir reenvio do draft após “ready”
+- Assim que `isReady` virar `true`, reenviar o último `draft` imediatamente (já existe lógica parcial; manter e reforçar para cobrir navegações internas do iframe).
+- Se `draft` for `null`, enviar `RESET_THEME_TO_SAVED`.
 
-Plano de implementação:
+3. Melhorar observabilidade para depuração
+- Adicionar logs de debug controlados (somente em dev):
+  - INIT enviado;
+  - READY recebido (com `channelId`);
+  - APPLY_THEME_DRAFT enviado.
+- Isso facilita validar se o problema é sincronização vs. URL de imagem.
 
-1. Ajustar `ThemeProvider` para expor “tema ativo” no contexto
-- Arquivo: `src/components/ThemeProvider.tsx`
-- Alterar valor de contexto para sempre expor `theme: (previewTheme || theme)`.
-- Manter `applyTheme` e `resetToSaved` como estão.
-- Resultado: qualquer componente que usar `useTheme()` passa a enxergar draft em tempo real no iframe.
+4. Hardening no `ThemeProvider` (iframe)
+- Manter validação por `channelId`.
+- Garantir que `THEME_PREVIEW_READY` seja respondido sempre que receber `THEME_PREVIEW_INIT`.
+- Não alterar contrato de tema nem schema.
 
-2. Conectar `Header` ao tema ativo e renderizar logo
-- Arquivo: `src/components/Header.tsx`
-- Importar `useTheme`.
-- Derivar `logoUrl` de `theme.components.images.logo` (com fallback seguro).
-- Substituir o bloco do brand por:
-  - se `logoUrl` existir: `<img>` com `alt={brandName}`, altura responsiva e `object-contain`;
-  - se não existir: manter texto atual (`brandName`).
-- Aplicar o mesmo comportamento no drawer mobile para consistência.
-- Preservar acessibilidade (alt, foco do link, layout estável).
+Arquivos a ajustar
+- `src/components/admin/ThemePreviewFrame.tsx` (principal)
+- `src/components/ThemeProvider.tsx` (apenas robustez/logs de handshake)
 
-3. Conectar `HeroBanner` ao tema ativo para banner customizado
-- Arquivo: `src/components/HeroBanner.tsx`
-- Importar `useTheme`.
-- Derivar `heroBannerUrl` de `theme.components.images.heroBanner`.
-- Usar `src={heroBannerUrl || heroBanner}` no `<img>` de fundo.
-- Mantém fallback para asset local quando não houver imagem customizada.
+Plano de validação (fim a fim)
+1) Fluxo principal:
+- Acessar `/admin/theme-editor`.
+- Subir logo no bloco “Logo da Marca”.
+- Confirmar atualização do header no iframe em tempo real (sem salvar).
 
-4. Regras de fallback e robustez
-- Prioridade de dados:
-  - preview ativo: draft recebido por postMessage;
-  - sem draft: tema salvo no DB;
-  - sem imagem: fallback atual (texto/asset local).
-- Garantir que URLs vazias (`''`) não quebrem render.
-- Não alterar estrutura de banco nem contratos de upload (já existentes).
+2) Fluxo repetido/intermitência:
+- Repetir upload/troca de logo 3–5 vezes.
+- Alternar viewport Desktop/Tablet/Mobile no preview.
+- Confirmar que nunca “trava” sem aplicar draft.
 
-5. Validação funcional (fim a fim)
-- No `/admin/theme-editor`:
-  - subir logo → deve aparecer no iframe sem salvar;
-  - remover logo → volta para nome em texto imediatamente;
-  - subir hero banner → fundo do hero atualiza no iframe.
-- Clicar “Salvar”, recarregar página da loja e confirmar persistência.
-- Testar desktop + mobile no preview (logo no header e menu mobile).
-- Verificar console/network para 404/CORS de imagem.
+3) Navegação no preview:
+- Clicar links internos no iframe (Home/Coleções/Mais Vendidos/Novidades).
+- Confirmar que após reload interno o draft continua sendo aplicado.
 
-Riscos e mitigação:
-- Risco de quebra visual por dimensões da logo:
-  - mitigar com classe de altura fixa e `object-contain`.
-- Risco de componente consumir tema antigo:
-  - mitigado ao expor `previewTheme || theme` no contexto.
-- Risco de URL inválida:
-  - mitigado com fallback automático para texto/logo padrão.
+4) Persistência:
+- Salvar tema.
+- Recarregar página.
+- Confirmar que logo permanece com tema salvo.
 
-Resultado esperado:
-- Upload de logo e banner no editor reflete em tempo real no iframe.
-- Após salvar, vitrine pública carrega as mesmas imagens.
-- Sem imagem configurada, UI continua como hoje (texto + banner padrão).
+Riscos e mitigação
+- Risco: intervalos sem limpeza causarem mensagens duplicadas.
+  - Mitigação: cleanup rigoroso em `useEffect` e stop no primeiro READY.
+- Risco: excesso de `postMessage`.
+  - Mitigação: intervalo curto apenas durante bootstrap; zero retry após ready.
+
+Resultado esperado
+- O preview deixa de depender de timing aleatório.
+- Upload de logo passa a refletir consistentemente no iframe em tempo real.
+- Não há impacto no fluxo de salvar tema nem na estrutura do banco.
