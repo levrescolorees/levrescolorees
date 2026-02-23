@@ -154,7 +154,7 @@ const ThemePreviewFrame = ({ draft }: ThemePreviewFrameProps) => {
           >
             {/* Real storefront rendered with draft CSS vars, interactions disabled */}
             <div
-              style={{ pointerEvents: 'none', userSelect: 'none' }}
+              onClickCapture={(e) => { e.preventDefault(); e.stopPropagation(); }}
             >
               <Header />
               <HeroBanner />
