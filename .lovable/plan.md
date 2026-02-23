@@ -1,88 +1,83 @@
 
+# Usar Componentes Reais da Loja no Preview do Tema
 
-# Corrigir Scroll do Preview e Adicionar Edição de Imagens
+## Problema
 
-## Problemas Identificados
+O preview atual usa componentes "mockados" (falsos) que simulam a loja mas nao correspondem ao layout e estilo real. O usuario quer ver a loja de verdade respondendo ao tema.
 
-1. **Preview sem scroll**: O `transform: scale()` aplicado no container reduz visualmente o conteúdo, mas o wrapper `overflow-auto` não reconhece a altura real porque CSS `transform` não afeta o layout flow. O container escalado fica "flutuando" dentro do espaço original.
+## Solucao
 
-2. **Sem edição de imagens**: Os cards de produto e o hero mostram apenas retângulos cinza (`hsl(var(--muted))`). Não há seção no editor para customizar imagens do hero banner, produtos mockados, ou logo.
+Substituir os componentes mockados pelos componentes reais da storefront (`Header`, `HeroBanner`, `BenefitsSection`, `CollectionsSection`, `SmartPricingSection`, `TestimonialsSection`, `FinalCTA`, `Footer`) renderizados dentro do container com CSS variables do draft. Como os componentes reais usam classes Tailwind que referenciam CSS custom properties (`bg-primary`, `text-foreground`, `font-display`), eles automaticamente refletem o tema do draft.
 
----
+## Desafios e Solucoes
 
-## Correções
+1. **Links (`react-router`)**: Os componentes usam `<Link>` que navegariam para fora do editor. Solucao: envolver tudo em um `div` com `pointer-events: none` para bloquear interacoes.
 
-### 1. Fix do Scroll no Preview
+2. **`FeaturedProducts` busca dados do DB**: Se nao houver produtos, retorna `null`. Solucao: manter um fallback com cards mockados simples caso nao haja produtos no banco.
 
-**Arquivo**: `src/components/admin/ThemePreviewFrame.tsx`
+3. **`Header` usa `useCart`**: Ja disponivel no contexto do app (o admin esta dentro dos providers). Nao precisa de mudanca.
 
-- Envolver o container escalado em um `div` wrapper que define `height` e `width` explícitos baseados no tamanho real do conteúdo multiplicado pelo scale
-- Usar `useEffect` + `ResizeObserver` no container interno para medir a altura real do conteúdo
-- Aplicar no wrapper externo: `height: containerHeight * scale` e `width: viewport * scale`
-- Isso permite ao `overflow-auto` do pai calcular corretamente a área de scroll
+4. **`useStoreSettings`**: Os componentes leem configuracoes salvas (brand name, hero text). Isso funciona normalmente. As cores/fontes vem das CSS vars do container, que serao as do draft.
 
-Lógica:
-```text
-containerReal = 1280px largura, ~900px altura (conteúdo do mockup)
-scale = 0.65 (exemplo)
-wrapperExplícito = { width: 1280 * 0.65, height: 900 * 0.65 }
-O pai com overflow-auto agora sabe a altura certa e permite scroll
-```
+5. **Animacoes `framer-motion`**: `whileInView` pode nao disparar corretamente no container escalado. Solucao: desabilitar animacoes no preview com `initial={false}` ou `LazyMotion` com features reduzidas -- mas a abordagem mais simples e deixar as animacoes rodarem naturalmente (elas disparam ao scroll).
 
-### 2. Adicionar Imagens ao Preview
+## Mudancas
 
-**Arquivo**: `src/components/admin/ThemePreviewFrame.tsx`
+### `src/components/admin/ThemePreviewFrame.tsx`
 
-- No `MockHero`: adicionar imagem de fundo usando a imagem do hero existente (`src/assets/hero-banner.jpg`) com overlay de gradiente usando as cores do tema
-- Nos `MockProductCard`: usar as imagens de produto existentes (`src/assets/box-06.jpg`, `src/assets/box-12.jpg`, `src/assets/collection-lipgloss.jpg`) no lugar do retângulo cinza
-- Importar as imagens como ES modules no topo do arquivo
+- Remover todos os componentes Mock (MockTopBar, MockHeader, MockHero, MockProductCard, MockCTA, MockFooter)
+- Importar os componentes reais: `Header`, `HeroBanner`, `BenefitsSection`, `FeaturedProducts`, `SmartPricingSection`, `CollectionsSection`, `TestimonialsSection`, `FinalCTA`, `Footer`
+- Renderizar os componentes reais dentro do container com scoped CSS vars
+- Envolver em `div` com `pointer-events: none` e `user-select: none` para impedir interacao
+- Manter a barra de ferramentas de viewport (Desktop/Tablet/Mobile)
+- Manter o sistema de scaling e scroll com ResizeObserver
 
-### 3. Seção de Imagens no Editor (Nova)
-
-**Arquivo**: `src/components/admin/ThemeEditor.tsx`
-
-- Adicionar nova seção "Imagens" no Accordion com:
-  - Upload/seleção de imagem do Hero Banner
-  - Upload/seleção de logo da marca
-- Por enquanto, as imagens do preview usarão as imagens existentes no projeto como placeholder
-- Esta seção será marcada como "Em breve" para upload customizado (requer integração com storage)
-
----
-
-## Detalhes Técnicos
-
-### Fix do scroll (ThemePreviewFrame.tsx)
+### Estrutura do preview
 
 ```text
-1. Adicionar state: contentHeight (number)
-2. Usar ResizeObserver no containerRef para capturar a altura real do conteúdo
-3. Criar div intermediário (spacer) com:
-   - width: viewport * scale
-   - height: contentHeight * scale  
-   - position: relative
-4. O container escalado fica position: absolute dentro deste spacer
-5. O pai overflow-auto agora tem a área correta para scroll
+<div style={{ ...scopedCssVars, width: viewport, transform: scale(...) }}>
+  <div style={{ pointerEvents: 'none', userSelect: 'none' }}>
+    <Header />
+    <HeroBanner />
+    <BenefitsSection />
+    <FeaturedProducts />       // fallback se sem dados
+    <SmartPricingSection />
+    <CollectionsSection />
+    <TestimonialsSection />
+    <FinalCTA />
+    <Footer />
+  </div>
+</div>
 ```
 
-### Imagens no preview (ThemePreviewFrame.tsx)
+## Resultado
 
-```text
-1. import heroBanner from '@/assets/hero-banner.jpg'
-2. import box06 from '@/assets/box-06.jpg'
-3. import box12 from '@/assets/box-12.jpg'
-4. import lipgloss from '@/assets/collection-lipgloss.jpg'
+O preview mostrara a loja real com todas as secoes, imagens, layout e tipografia exatamente como o cliente final vera -- mas com as cores, fontes e radius do draft aplicados em tempo real. Qualquer alteracao no editor sera refletida instantaneamente.
 
-MockHero:
-- backgroundImage: url(heroBanner) com overlay gradiente semi-transparente
-- Manter texto e botão por cima
-
-MockProductCard:
-- Substituir div cinza por <img> com as imagens importadas
-- object-fit: cover no aspect-square
-```
+## Secao Tecnica
 
 ### Arquivos modificados
 
 ```text
-src/components/admin/ThemePreviewFrame.tsx — fix scroll + adicionar imagens reais
+src/components/admin/ThemePreviewFrame.tsx — substituir mocks por componentes reais
 ```
+
+### Como funciona a cascata de CSS vars
+
+Os componentes reais usam classes Tailwind como `bg-primary` que compila para `background-color: hsl(var(--primary))`. O container pai define `--primary` via `style` attribute com o valor do draft. CSS custom properties cascateiam para filhos, entao todos os componentes herdam automaticamente as cores do draft sem nenhuma modificacao nos componentes originais.
+
+### Dependencias dos componentes reais
+
+```text
+Header       -> useCart, useStoreSettings, Link, framer-motion
+HeroBanner   -> useStoreSettings, Link, framer-motion
+Benefits     -> framer-motion (sem deps externas)
+Featured     -> useStorefrontProducts (DB query), ProductCard -> useCart, Link
+SmartPricing -> framer-motion (sem deps externas)
+Collections  -> Link, framer-motion (imports de imagens estaticas)
+Testimonials -> framer-motion (sem deps externas)
+FinalCTA     -> Link, framer-motion
+Footer       -> useStoreSettings, Link
+```
+
+Todos os providers necessarios (CartProvider, QueryClientProvider, RouterProvider) ja existem no contexto pai do admin. Os componentes funcionarao sem modificacao.
