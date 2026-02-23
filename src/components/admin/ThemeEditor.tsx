@@ -72,10 +72,13 @@ const ThemeEditor = ({ onDraftChange }: ThemeEditorProps) => {
   useEffect(() => {
     if (settings && !loaded) {
       const saved = settings.theme;
+      let initial = DEFAULT_THEME;
       if (saved) {
-        const migrated = migrateTheme(saved);
-        setDraft(migrated);
+        initial = migrateTheme(saved);
       }
+      setDraft(initial);
+      applyTheme(initial);
+      onDraftChange?.(initial);
       setLoaded(true);
     }
   }, [settings, loaded]);

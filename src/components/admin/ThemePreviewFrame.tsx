@@ -100,12 +100,13 @@ const ThemePreviewFrame = ({ draft }: ThemePreviewFrameProps) => {
   const draftRef = useRef(draft);
   draftRef.current = draft;
 
+  // Send draft when it changes
   useEffect(() => {
     const iframe = iframeRef.current;
     if (!iframe?.contentWindow || !isReady) return;
 
     if (draft) {
-      if (import.meta.env.DEV) console.log('[ThemePreview] sending APPLY_THEME_DRAFT');
+      if (import.meta.env.DEV) console.log('[ThemePreview] sending APPLY_THEME_DRAFT', { hasLogo: !!draft.components?.images?.logo });
       iframe.contentWindow.postMessage(
         { type: 'APPLY_THEME_DRAFT', channelId, theme: draft },
         '*'
@@ -117,6 +118,21 @@ const ThemePreviewFrame = ({ draft }: ThemePreviewFrameProps) => {
       );
     }
   }, [draft, isReady, channelId]);
+
+  // Re-send draft immediately when isReady becomes true (handles iframe internal reloads)
+  useEffect(() => {
+    if (!isReady) return;
+    const iframe = iframeRef.current;
+    if (!iframe?.contentWindow) return;
+    const currentDraft = draftRef.current;
+    if (currentDraft) {
+      if (import.meta.env.DEV) console.log('[ThemePreview] re-sending draft on READY', { hasLogo: !!currentDraft.components?.images?.logo });
+      iframe.contentWindow.postMessage(
+        { type: 'APPLY_THEME_DRAFT', channelId, theme: currentDraft },
+        '*'
+      );
+    }
+  }, [isReady, channelId]);
 
   const iframeHeight = 2400; // tall enough for full page scroll
 

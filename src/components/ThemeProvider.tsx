@@ -121,6 +121,7 @@ const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
         window.parent.postMessage({ type: 'THEME_PREVIEW_READY', channelId }, '*');
       }
       if (type === 'APPLY_THEME_DRAFT' && channelId === channelIdRef.current && msgTheme) {
+        if (import.meta.env.DEV) console.log('[ThemeProvider] received APPLY_THEME_DRAFT', { logo: msgTheme?.components?.images?.logo || 'none' });
         const migrated = migrateTheme(msgTheme);
         setPreviewTheme(migrated);
       }
