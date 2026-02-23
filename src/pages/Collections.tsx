@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import Header from '@/components/Header';
@@ -21,9 +21,14 @@ interface CollectionsProps {
 const Collections = ({ initialFilter = null }: CollectionsProps) => {
   const [searchParams] = useSearchParams();
   const filterParam = searchParams.get('filter');
-  const resolvedInitialFilter = initialFilter ?? filterParam ?? 'all';
-  const [activeCollection, setActiveCollection] = useState(resolvedInitialFilter);
+  const resolvedFilter = initialFilter ?? filterParam ?? 'all';
+  const [activeCollection, setActiveCollection] = useState(resolvedFilter);
   const [activePriceRange, setActivePriceRange] = useState(0);
+
+  // Sync state when URL filter changes (e.g. navigating between Mais Vendidos ↔ Novidades)
+  useEffect(() => {
+    setActiveCollection(resolvedFilter);
+  }, [resolvedFilter]);
 
   const { data: products, isLoading } = useStorefrontProducts();
   const { data: collections } = useCollections();
