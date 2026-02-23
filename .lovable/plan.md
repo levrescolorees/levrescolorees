@@ -1,81 +1,73 @@
 
-Objetivo
-Corrigir de forma definitiva o caso em que a logo enviada no Editor de Tema “às vezes” não aparece no preview do iframe, mesmo aparecendo no card de upload.
 
-Diagnóstico (com base no código atual + screenshot)
-1) O pipeline de render da logo já existe:
-- `ThemeEditor` grava em `draft.components.images.logo`.
-- `ThemePreviewFrame` envia draft por `postMessage`.
-- `ThemeProvider` no iframe recebe draft e expõe `theme`.
-- `Header` renderiza `<img src={logoUrl} ...>` quando `logoUrl` existe.
+## Correcao: Logo nao aparece no preview do iframe
 
-2) O ponto frágil está no handshake do iframe:
-- Em `ThemePreviewFrame`, o `THEME_PREVIEW_INIT` é enviado apenas 1 vez no `onLoad`.
-- Se o listener do `ThemeProvider` ainda não estiver registrado naquele exato momento, a mensagem se perde.
-- Sem `THEME_PREVIEW_READY`, `isReady` não sobe, e o draft não é reenviado.
-- Isso explica comportamento intermitente (“problema novamente”).
+### Problema identificado
 
-3) O screenshot é compatível com falha de sincronização:
-- O card de upload mostra a imagem no painel esquerdo.
-- O preview da direita continua sem refletir draft da logo.
+Apos analise detalhada do codigo, identifiquei duas causas provaveis:
 
-Escopo da correção
-1. Tornar handshake resiliente em `ThemePreviewFrame`
-- Manter `channelId` estável.
-- Implementar retry automático de `THEME_PREVIEW_INIT` até receber `THEME_PREVIEW_READY`:
-  - iniciar tentativa no `onLoad`;
-  - repetir em intervalo curto (ex.: 250–400ms) enquanto `isReady === false`;
-  - parar imediatamente quando `isReady` ficar `true`;
-  - limpar intervalo em unmount/troca de navegação.
-- Isso elimina dependência de timing entre `onLoad` e `useEffect` do iframe.
+1. **Draft inicial nunca e enviado ao iframe**: O `ThemeEditor` inicializa seu `draft` interno com `DEFAULT_THEME` mas so chama `onDraftChange` quando o usuario interage (ex.: upload). Porem o `AdminThemeEditor` inicia com `draft = null`. Quando o usuario faz upload da logo, `onDraftChange` e chamado com o tema completo (incluindo a logo), e o draft e enviado ao iframe. Isso DEVERIA funcionar.
 
-2. Garantir reenvio do draft após “ready”
-- Assim que `isReady` virar `true`, reenviar o último `draft` imediatamente (já existe lógica parcial; manter e reforçar para cobrir navegações internas do iframe).
-- Se `draft` for `null`, enviar `RESET_THEME_TO_SAVED`.
+2. **Causa mais provavel - O `ThemeEditor` chama `applyTheme` do contexto pai, o que pode causar efeitos colaterais**: `updateDraft` chama `applyTheme(next)` que e o `contextApply` do ThemeProvider pai. Isso seta `previewTheme` no provider pai, mas nao afeta o iframe. O iframe depende exclusivamente do `postMessage`.
 
-3. Melhorar observabilidade para depuração
-- Adicionar logs de debug controlados (somente em dev):
-  - INIT enviado;
-  - READY recebido (com `channelId`);
-  - APPLY_THEME_DRAFT enviado.
-- Isso facilita validar se o problema é sincronização vs. URL de imagem.
+3. **Possivel problema de referencia no efeito do ThemePreviewFrame**: Se `draft` muda de `null` para um objeto e depois muda internamente (por exemplo, ao mudar uma cor E depois subir a logo), cada chamada cria um novo objeto. Mas se `handleIframeLoad` dispara entre essas mudancas (navegacao interna do iframe), `isReady` reseta e o efeito nao reenvia o draft ate `isReady` voltar a `true`.
 
-4. Hardening no `ThemeProvider` (iframe)
-- Manter validação por `channelId`.
-- Garantir que `THEME_PREVIEW_READY` seja respondido sempre que receber `THEME_PREVIEW_INIT`.
-- Não alterar contrato de tema nem schema.
+### Solucao proposta
 
-Arquivos a ajustar
-- `src/components/admin/ThemePreviewFrame.tsx` (principal)
-- `src/components/ThemeProvider.tsx` (apenas robustez/logs de handshake)
+**Arquivo 1: `src/components/admin/ThemePreviewFrame.tsx`**
 
-Plano de validação (fim a fim)
-1) Fluxo principal:
-- Acessar `/admin/theme-editor`.
-- Subir logo no bloco “Logo da Marca”.
-- Confirmar atualização do header no iframe em tempo real (sem salvar).
+Adicionar logica para reenviar o draft imediatamente apos o handshake completar (isReady = true), usando o `draftRef` que ja existe:
 
-2) Fluxo repetido/intermitência:
-- Repetir upload/troca de logo 3–5 vezes.
-- Alternar viewport Desktop/Tablet/Mobile no preview.
-- Confirmar que nunca “trava” sem aplicar draft.
+- Quando `isReady` muda para `true`, verificar `draftRef.current` e enviar imediatamente
+- Isso garante que mesmo que o iframe recarregue internamente, o draft mais recente (com a logo) sera reenviado
 
-3) Navegação no preview:
-- Clicar links internos no iframe (Home/Coleções/Mais Vendidos/Novidades).
-- Confirmar que após reload interno o draft continua sendo aplicado.
+**Arquivo 2: `src/components/admin/ThemeEditor.tsx`**  
 
-4) Persistência:
-- Salvar tema.
-- Recarregar página.
-- Confirmar que logo permanece com tema salvo.
+Enviar draft inicial ao pai quando o componente carrega:
 
-Riscos e mitigação
-- Risco: intervalos sem limpeza causarem mensagens duplicadas.
-  - Mitigação: cleanup rigoroso em `useEffect` e stop no primeiro READY.
-- Risco: excesso de `postMessage`.
-  - Mitigação: intervalo curto apenas durante bootstrap; zero retry após ready.
+- No `useEffect` que inicializa o draft a partir do DB (ou usa DEFAULT_THEME), chamar `onDraftChange` para que o pai e o preview frame recebam o estado inicial
+- Isso garante que o iframe sempre receba o draft completo, nao apenas quando o usuario interage
 
-Resultado esperado
-- O preview deixa de depender de timing aleatório.
-- Upload de logo passa a refletir consistentemente no iframe em tempo real.
-- Não há impacto no fluxo de salvar tema nem na estrutura do banco.
+**Arquivo 3: `src/components/ThemeProvider.tsx`**
+
+Adicionar log de debug para confirmar recebimento do draft com imagens no iframe.
+
+### Detalhes tecnicos
+
+```text
+Fluxo corrigido:
+
+ThemeEditor (carrega) 
+  -> setDraft(DEFAULT_THEME) 
+  -> onDraftChange(DEFAULT_THEME)      <-- NOVO: envia draft inicial
+  -> AdminThemeEditor.draft = theme
+  -> ThemePreviewFrame recebe draft
+
+Usuario sobe logo:
+  -> updateImage('logo', url)
+  -> updateDraft(themeComLogo) 
+  -> onDraftChange(themeComLogo)
+  -> ThemePreviewFrame envia via postMessage
+  -> ThemeProvider (iframe) recebe e seta previewTheme
+  -> Header le logo do contexto e renderiza <img>
+
+Iframe recarrega internamente:
+  -> handleIframeLoad -> isReady = false -> retry INIT
+  -> isReady = true
+  -> efeito de reenvio usa draftRef.current   <-- REFORCO
+  -> draft com logo e reenviado
+```
+
+### Mudancas especificas
+
+1. **ThemePreviewFrame.tsx**: Adicionar `useEffect` que reenvia `draftRef.current` quando `isReady` muda para `true` (similar ao que foi removido na ultima edicao, mas agora usando o ref para evitar stale closures)
+
+2. **ThemeEditor.tsx**: No `useEffect` de inicializacao, chamar `onDraftChange?.(draft)` apos setar o draft, para sincronizar o estado inicial com o pai
+
+3. **ThemeProvider.tsx**: Log condicional ao receber `APPLY_THEME_DRAFT` mostrando se `components.images.logo` tem valor
+
+### Validacao
+
+- Subir logo no editor -> deve aparecer no preview imediatamente
+- Trocar viewport (Desktop/Tablet/Mobile) -> logo deve persistir
+- Salvar tema -> recarregar pagina -> logo deve aparecer na loja publica
