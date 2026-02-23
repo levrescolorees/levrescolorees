@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Save, Truck, Palette, Type, Plus, Trash2, Paintbrush } from 'lucide-react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Save, Truck, Palette, Type, Plus, Trash2, Paintbrush, ExternalLink } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -10,7 +11,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { toast } from 'sonner';
 
 import { useStoreSettings, useShippingRules } from '@/hooks/useStoreSettings';
-import ThemeEditor from '@/components/admin/ThemeEditor';
 
 // ─── Component ────────────────────────────────────────────
 const AdminSettings = () => {
@@ -114,7 +114,17 @@ const AdminSettings = () => {
 
         {/* ─── Theme ─────────────────────────────── */}
         <TabsContent value="theme">
-          <ThemeEditor />
+          <div className="bg-card rounded-lg shadow-soft p-6 space-y-4 max-w-xl">
+            <h2 className="font-display text-lg font-semibold text-foreground">Editor de Tema</h2>
+            <p className="font-body text-sm text-muted-foreground">
+              Use o editor completo para personalizar todas as cores, fontes e estilos da loja.
+            </p>
+            <Link to="/admin/theme-editor">
+              <Button className="gap-2">
+                <Paintbrush className="w-4 h-4" /> Abrir Editor de Tema <ExternalLink className="w-3 h-3" />
+              </Button>
+            </Link>
+          </div>
         </TabsContent>
 
         {/* ─── Brand ─────────────────────────────── */}

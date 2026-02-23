@@ -27,6 +27,7 @@ import AdminCoupons from "./pages/admin/AdminCoupons";
 import AdminSettings from "./pages/admin/AdminSettings";
 import AdminMedia from "./pages/admin/AdminMedia";
 import AdminIntegrations from "./pages/admin/AdminIntegrations";
+import AdminThemeEditor from "./pages/admin/AdminThemeEditor";
 
 const queryClient = new QueryClient();
 
@@ -63,6 +64,7 @@ const App = () => (
                 <Route path="midia" element={<AdminMedia />} />
                 <Route path="integracoes" element={<AdminIntegrations />} />
                 <Route path="configuracoes" element={<AdminSettings />} />
+                <Route path="theme-editor" element={<AdminThemeEditor />} />
               </Route>
 
               <Route path="*" element={<NotFound />} />
