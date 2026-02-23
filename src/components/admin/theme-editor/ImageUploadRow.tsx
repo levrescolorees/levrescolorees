@@ -3,6 +3,7 @@ import { Upload, X, Loader2, ImageIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import ImageCropModal from './ImageCropModal';
 
 interface ImageUploadRowProps {
   label: string;
@@ -10,18 +11,20 @@ interface ImageUploadRowProps {
   value: string;
   onChange: (url: string) => void;
   folder: string;
+  aspect?: number;
 }
 
 const SUPABASE_URL = "https://jefuidilwgzsnifjgdaf.supabase.co";
 
-export default function ImageUploadRow({ label, description, value, onChange, folder }: ImageUploadRowProps) {
+export default function ImageUploadRow({ label, description, value, onChange, folder, aspect }: ImageUploadRowProps) {
   const [uploading, setUploading] = useState(false);
+  const [cropSrc, setCropSrc] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const publicUrl = (path: string) =>
     `${SUPABASE_URL}/storage/v1/object/public/theme-assets/${path}`;
 
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -34,14 +37,21 @@ export default function ImageUploadRow({ label, description, value, onChange, fo
       return;
     }
 
+    // Create object URL and open crop modal
+    const url = URL.createObjectURL(file);
+    setCropSrc(url);
+    if (inputRef.current) inputRef.current.value = '';
+  };
+
+  const handleCropConfirm = async (blob: Blob) => {
+    setCropSrc(null);
     setUploading(true);
     try {
-      const ext = file.name.split('.').pop() || 'jpg';
-      const path = `${folder}/${Date.now()}.${ext}`;
+      const path = `${folder}/${Date.now()}.jpg`;
 
       const { error } = await supabase.storage
         .from('theme-assets')
-        .upload(path, file, { upsert: true });
+        .upload(path, blob, { upsert: true, contentType: 'image/jpeg' });
 
       if (error) throw error;
 
@@ -52,8 +62,12 @@ export default function ImageUploadRow({ label, description, value, onChange, fo
       toast.error(err.message || 'Erro ao fazer upload.');
     } finally {
       setUploading(false);
-      if (inputRef.current) inputRef.current.value = '';
     }
+  };
+
+  const handleCropClose = () => {
+    if (cropSrc) URL.revokeObjectURL(cropSrc);
+    setCropSrc(null);
   };
 
   const handleRemove = () => {
@@ -101,9 +115,19 @@ export default function ImageUploadRow({ label, description, value, onChange, fo
         ref={inputRef}
         type="file"
         accept="image/*"
-        onChange={handleUpload}
+        onChange={handleFileSelect}
         className="hidden"
       />
+
+      {cropSrc && (
+        <ImageCropModal
+          open
+          imageSrc={cropSrc}
+          aspect={aspect}
+          onClose={handleCropClose}
+          onConfirm={handleCropConfirm}
+        />
+      )}
     </div>
   );
 }
