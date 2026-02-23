@@ -139,7 +139,7 @@ const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
   }, []);
 
   return (
-    <ThemeContext.Provider value={{ theme, applyTheme: contextApply, resetToSaved }}>
+    <ThemeContext.Provider value={{ theme: previewTheme || theme, applyTheme: contextApply, resetToSaved }}>
       {children}
     </ThemeContext.Provider>
   );

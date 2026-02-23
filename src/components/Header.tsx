@@ -4,16 +4,18 @@ import { ShoppingBag, Menu, X, Search } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useStoreSettings } from '@/hooks/useStoreSettings';
+import { useTheme } from '@/components/ThemeProvider';
 
 const Header = () => {
   const { totalItems, setIsCartOpen } = useCart();
   const [mobileOpen, setMobileOpen] = useState(false);
   const { data: settings } = useStoreSettings();
+  const { theme: activeTheme } = useTheme();
 
   const brandName = settings?.brand?.name || 'Lèvres Colorées';
-  const theme = settings?.theme as any;
-  const topBarVisible = theme?.components?.topBar?.visible ?? theme?.topBar?.visible ?? true;
-  const topBarText = theme?.components?.topBar?.text || theme?.topBar?.text || 'FRETE GRÁTIS acima de R$299 • Compre no Atacado e economize até 40%';
+  const logoUrl = activeTheme?.components?.images?.logo || '';
+  const topBarVisible = activeTheme?.components?.topBar?.visible ?? true;
+  const topBarText = activeTheme?.components?.topBar?.text || 'FRETE GRÁTIS acima de R$299 • Compre no Atacado e economize até 40%';
 
   const navLinks = [
     { to: '/', label: 'Home' },
@@ -38,8 +40,14 @@ const Header = () => {
             <Menu className="w-5 h-5" />
           </button>
 
-          <Link to="/" className="font-display text-xl md:text-2xl font-semibold tracking-wide text-foreground">
-            {brandName}
+          <Link to="/" className="flex items-center">
+            {logoUrl ? (
+              <img src={logoUrl} alt={brandName} className="h-8 md:h-10 w-auto object-contain" />
+            ) : (
+              <span className="font-display text-xl md:text-2xl font-semibold tracking-wide text-foreground">
+                {brandName}
+              </span>
+            )}
           </Link>
 
           <nav className="hidden md:flex items-center gap-8">
@@ -98,7 +106,11 @@ const Header = () => {
               <button onClick={() => setMobileOpen(false)} className="absolute top-4 right-4 text-foreground">
                 <X className="w-5 h-5" />
               </button>
-              <div className="font-display text-xl font-semibold mb-8 text-foreground">{brandName}</div>
+              {logoUrl ? (
+                <img src={logoUrl} alt={brandName} className="h-8 w-auto object-contain mb-8" />
+              ) : (
+                <div className="font-display text-xl font-semibold mb-8 text-foreground">{brandName}</div>
+              )}
               <nav className="flex flex-col gap-4">
                 {navLinks.map(link => (
                   <Link

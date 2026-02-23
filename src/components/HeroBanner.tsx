@@ -1,11 +1,16 @@
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import heroBanner from '@/assets/hero-banner.jpg';
+import heroBannerDefault from '@/assets/hero-banner.jpg';
 import { useStoreSettings } from '@/hooks/useStoreSettings';
+import { useTheme } from '@/components/ThemeProvider';
 
 const HeroBanner = () => {
   const { data: settings } = useStoreSettings();
+  const { theme } = useTheme();
   const hero = settings?.hero;
+
+  const heroBannerUrl = theme?.components?.images?.heroBanner;
+  const heroBanner = heroBannerUrl || heroBannerDefault;
 
   const headline = hero?.headline || 'Seus lábios, sua assinatura.';
   const subheadline = hero?.subheadline || 'Cores vibrantes, texturas irresistíveis. Do varejo ao atacado, encontre o mix perfeito para brilhar — ou revender.';
