@@ -2,23 +2,6 @@ import { useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import { Monitor, Tablet, Smartphone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { ThemeSettings } from '@/theme/defaultTheme';
-import { DEFAULT_THEME, type ThemeColors } from '@/theme/defaultTheme';
-import { getFontFamily, loadFont } from '@/theme/fontMap';
-
-// Real storefront components
-import Header from '@/components/Header';
-import HeroBanner from '@/components/HeroBanner';
-import BenefitsSection from '@/components/BenefitsSection';
-import FeaturedProducts from '@/components/FeaturedProducts';
-import SmartPricingSection from '@/components/SmartPricingSection';
-import CollectionsSection from '@/components/CollectionsSection';
-import TestimonialsSection from '@/components/TestimonialsSection';
-import FinalCTA from '@/components/FinalCTA';
-import Footer from '@/components/Footer';
-
-// Full pages for preview navigation
-import Collections from '@/pages/Collections';
-import Atacado from '@/pages/Atacado';
 
 const VIEWPORTS = [
   { label: 'Desktop', width: 1280, icon: Monitor },
@@ -30,73 +13,28 @@ interface ThemePreviewFrameProps {
   draft: ThemeSettings | null;
 }
 
-const COLOR_TO_CSS: Record<keyof ThemeColors, string> = {
-  primary: '--primary',
-  primary_light: '--rose-light',
-  primary_glow: '--rose-glow',
-  background: '--background',
-  card: '--card',
-  card_foreground: '--card-foreground',
-  foreground: '--foreground',
-  muted: '--muted',
-  muted_foreground: '--muted-foreground',
-  accent: '--accent',
-  accent_foreground: '--accent-foreground',
-  secondary: '--secondary',
-  secondary_foreground: '--secondary-foreground',
-  popover: '--popover',
-  popover_foreground: '--popover-foreground',
-  primary_foreground: '--primary-foreground',
-  destructive: '--destructive',
-  destructive_foreground: '--destructive-foreground',
-  border: '--border',
-  input: '--input',
-  ring: '--ring',
-  nude: '--nude',
-  charcoal: '--charcoal',
-};
-
-function buildScopedStyle(theme: ThemeSettings): React.CSSProperties {
-  const { colors, fonts, radius } = theme.tokens;
-  const style: Record<string, string> = {};
-  for (const [key, cssVar] of Object.entries(COLOR_TO_CSS)) {
-    const value = colors[key as keyof ThemeColors];
-    if (value) style[cssVar] = value;
-  }
-  style['--rose'] = colors.primary;
-  style['--cream'] = colors.background;
-  style['--font-display'] = getFontFamily(fonts.display);
-  style['--font-body'] = getFontFamily(fonts.body);
-  style['--radius'] = radius;
-  return style as unknown as React.CSSProperties;
-}
-
-type PreviewPage = 'home' | 'collections' | 'atacado';
-
 const ThemePreviewFrame = ({ draft }: ThemePreviewFrameProps) => {
-  const contentRef = useRef<HTMLDivElement>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [viewport, setViewport] = useState(1280);
   const [scale, setScale] = useState(1);
-  const [contentHeight, setContentHeight] = useState(800);
-  const [previewPage, setPreviewPage] = useState<PreviewPage>('home');
-  const [previewCollectionFilter, setPreviewCollectionFilter] = useState<string | null>(null);
+  const [isReady, setIsReady] = useState(false);
 
-  const theme = draft || DEFAULT_THEME;
+  // Stable channel id per mount
+  const channelId = useMemo(() => crypto.randomUUID(), []);
 
-  // Load fonts
-  useEffect(() => {
-    loadFont(theme.tokens.fonts.display);
-    loadFont(theme.tokens.fonts.body);
-  }, [theme.tokens.fonts.display, theme.tokens.fonts.body]);
+  // Build iframe src
+  const previewUrl = useMemo(() => {
+    const base = window.location.origin;
+    return `${base}/?theme_preview=1`;
+  }, []);
 
-  // Calculate scale based on available width
+  // ── Scale calculation ──────────────────────────────────
   const updateScale = useCallback(() => {
     const wrapper = wrapperRef.current;
     if (!wrapper) return;
     const available = wrapper.clientWidth - 32;
-    const s = Math.min(1, available / viewport);
-    setScale(s);
+    setScale(Math.min(1, available / viewport));
   }, [viewport]);
 
   useEffect(() => {
@@ -105,23 +43,60 @@ const ThemePreviewFrame = ({ draft }: ThemePreviewFrameProps) => {
     return () => window.removeEventListener('resize', updateScale);
   }, [updateScale]);
 
-  // Observe content height for proper scroll sizing
+  // ── Handshake: listen for THEME_PREVIEW_READY ──────────
   useEffect(() => {
-    const el = contentRef.current;
-    if (!el) return;
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        setContentHeight(entry.contentRect.height);
+    const handler = (e: MessageEvent) => {
+      if (e.data?.type === 'THEME_PREVIEW_READY' && e.data?.channelId === channelId) {
+        setIsReady(true);
       }
-    });
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, [channelId]);
 
-  const scopedStyle = useMemo(() => buildScopedStyle(theme), [theme]);
+  // ── On iframe load, send INIT ──────────────────────────
+  const handleIframeLoad = useCallback(() => {
+    setIsReady(false);
+    const iframe = iframeRef.current;
+    if (!iframe?.contentWindow) return;
+    iframe.contentWindow.postMessage(
+      { type: 'THEME_PREVIEW_INIT', channelId },
+      '*'
+    );
+  }, [channelId]);
 
-  const spacerWidth = viewport * scale;
-  const spacerHeight = contentHeight * scale;
+  // ── Send draft whenever it changes & iframe is ready ───
+  useEffect(() => {
+    const iframe = iframeRef.current;
+    if (!iframe?.contentWindow || !isReady) return;
+
+    if (draft) {
+      iframe.contentWindow.postMessage(
+        { type: 'APPLY_THEME_DRAFT', channelId, theme: draft },
+        '*'
+      );
+    } else {
+      iframe.contentWindow.postMessage(
+        { type: 'RESET_THEME_TO_SAVED', channelId },
+        '*'
+      );
+    }
+  }, [draft, isReady, channelId]);
+
+  // Also re-send draft right after ready flips to true
+  useEffect(() => {
+    if (!isReady || !draft) return;
+    const iframe = iframeRef.current;
+    if (!iframe?.contentWindow) return;
+    iframe.contentWindow.postMessage(
+      { type: 'APPLY_THEME_DRAFT', channelId, theme: draft },
+      '*'
+    );
+    // intentionally only on isReady change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isReady]);
+
+  const iframeHeight = 2400; // tall enough for full page scroll
 
   return (
     <div className="flex flex-col h-full">
@@ -146,74 +121,31 @@ const ThemePreviewFrame = ({ draft }: ThemePreviewFrameProps) => {
 
       {/* Preview area */}
       <div ref={wrapperRef} className="flex-1 overflow-auto bg-muted/20 flex justify-center p-4">
-        <div style={{ width: spacerWidth, height: spacerHeight, position: 'relative', flexShrink: 0 }}>
-          <div
-            ref={contentRef}
+        <div
+          style={{
+            width: viewport * scale,
+            height: iframeHeight * scale,
+            position: 'relative',
+            flexShrink: 0,
+          }}
+        >
+          <iframe
+            ref={iframeRef}
+            src={previewUrl}
+            onLoad={handleIframeLoad}
+            title="Theme Preview"
             style={{
-              ...scopedStyle,
               width: viewport,
+              height: iframeHeight,
               transformOrigin: 'top left',
               transform: `scale(${scale})`,
               position: 'absolute',
               top: 0,
               left: 0,
+              border: 'none',
             }}
-            className="shadow-lg border border-border rounded-lg overflow-hidden"
-          >
-            {/* Real storefront rendered with draft CSS vars, interactions disabled */}
-            <div
-              onClickCapture={(e) => {
-                const target = e.target as HTMLElement;
-                const anchor = target.closest('a');
-                if (!anchor) return;
-
-                e.preventDefault();
-                e.stopPropagation();
-
-                try {
-                  const rawHref = anchor.getAttribute('href') || anchor.href || '';
-                  const parsed = new URL(rawHref, window.location.origin);
-                  const pathname = parsed.pathname.toLowerCase();
-                  const filter = parsed.searchParams.get('filter');
-
-                  if (pathname === '/colecoes') {
-                    setPreviewCollectionFilter(filter);
-                    setPreviewPage('collections');
-                  } else if (pathname === '/atacado') {
-                    setPreviewCollectionFilter(null);
-                    setPreviewPage('atacado');
-                  } else if (pathname === '/') {
-                    setPreviewCollectionFilter(null);
-                    setPreviewPage('home');
-                  }
-                } catch {
-                  // Ignore malformed hrefs in preview
-                }
-              }}
-              onSubmitCapture={(e) => { e.preventDefault(); e.stopPropagation(); }}
-            >
-              {previewPage === 'home' && (
-                <>
-                  <Header />
-                  <HeroBanner />
-                  <BenefitsSection />
-                  <FeaturedProducts />
-                  <SmartPricingSection />
-                  <CollectionsSection />
-                  <TestimonialsSection />
-                  <FinalCTA />
-                  <Footer />
-                </>
-              )}
-              {previewPage === 'collections' && (
-                <Collections
-                  key={`preview-collections-${previewCollectionFilter ?? 'all'}`}
-                  initialFilter={previewCollectionFilter}
-                />
-              )}
-              {previewPage === 'atacado' && <Atacado />}
-            </div>
-          </div>
+            className="shadow-lg rounded-lg overflow-hidden bg-background"
+          />
         </div>
       </div>
     </div>
