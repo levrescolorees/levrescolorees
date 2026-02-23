@@ -26,7 +26,13 @@ const ThemePreviewFrame = ({ draft }: ThemePreviewFrameProps) => {
   // Build iframe src
   const previewUrl = useMemo(() => {
     const base = window.location.origin;
-    return `${base}/?theme_preview=1`;
+    const parentParams = new URLSearchParams(window.location.search);
+    const params = new URLSearchParams();
+    parentParams.forEach((value, key) => {
+      if (key !== 'theme_preview') params.set(key, value);
+    });
+    params.set('theme_preview', '1');
+    return `${base}/?${params.toString()}`;
   }, []);
 
   // ── Scale calculation ──────────────────────────────────
