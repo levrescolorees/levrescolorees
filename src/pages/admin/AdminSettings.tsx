@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Save, Truck, Palette, Type, Plus, Trash2 } from 'lucide-react';
+import { Save, Truck, Palette, Type, Plus, Trash2, Paintbrush } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Input } from '@/components/ui/input';
@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { toast } from 'sonner';
 
 import { useStoreSettings, useShippingRules } from '@/hooks/useStoreSettings';
+import ThemeEditor from '@/components/admin/ThemeEditor';
 
 // ─── Component ────────────────────────────────────────────
 const AdminSettings = () => {
@@ -103,12 +104,18 @@ const AdminSettings = () => {
     <div className="space-y-6">
       <h1 className="font-display text-2xl font-bold text-foreground">Configurações</h1>
 
-      <Tabs defaultValue="brand" className="space-y-6">
+      <Tabs defaultValue="theme" className="space-y-6">
         <TabsList>
+          <TabsTrigger value="theme" className="font-body"><Paintbrush className="w-4 h-4 mr-1.5" /> Tema</TabsTrigger>
           <TabsTrigger value="brand" className="font-body"><Palette className="w-4 h-4 mr-1.5" /> Marca</TabsTrigger>
           <TabsTrigger value="hero" className="font-body"><Type className="w-4 h-4 mr-1.5" /> Hero / Home</TabsTrigger>
           <TabsTrigger value="shipping" className="font-body"><Truck className="w-4 h-4 mr-1.5" /> Frete</TabsTrigger>
         </TabsList>
+
+        {/* ─── Theme ─────────────────────────────── */}
+        <TabsContent value="theme">
+          <ThemeEditor />
+        </TabsContent>
 
         {/* ─── Brand ─────────────────────────────── */}
         <TabsContent value="brand">

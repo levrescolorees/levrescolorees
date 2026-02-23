@@ -11,6 +11,9 @@ const Header = () => {
   const { data: settings } = useStoreSettings();
 
   const brandName = settings?.brand?.name || 'Lèvres Colorées';
+  const theme = settings?.theme as any;
+  const topBarVisible = theme?.topBar?.visible ?? true;
+  const topBarText = theme?.topBar?.text || 'FRETE GRÁTIS acima de R$299 • Compre no Atacado e economize até 40%';
 
   const navLinks = [
     { to: '/', label: 'Home' },
@@ -23,9 +26,11 @@ const Header = () => {
   return (
     <>
       {/* Top bar */}
-      <div className="bg-primary text-primary-foreground text-center py-2 text-xs font-body tracking-wider">
-        FRETE GRÁTIS acima de R$299 • Compre no Atacado e economize até 40%
-      </div>
+      {topBarVisible && (
+        <div className="bg-primary text-primary-foreground text-center py-2 text-xs font-body tracking-wider">
+          {topBarText}
+        </div>
+      )}
 
       <header className="sticky top-0 z-50 bg-background/95 backdrop-blur-md border-b border-border">
         <div className="container mx-auto px-4 flex items-center justify-between h-16 md:h-20">

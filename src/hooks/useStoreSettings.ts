@@ -13,6 +13,28 @@ export interface HeroSettings {
   cta_link: string;
 }
 
+export interface ThemeColors {
+  primary: string;
+  primary_light: string;
+  primary_glow: string;
+  background: string;
+  card: string;
+  foreground: string;
+  muted_foreground: string;
+  accent: string;
+  nude: string;
+  charcoal: string;
+  border: string;
+  destructive: string;
+}
+
+export interface ThemeSettings {
+  colors: ThemeColors;
+  fonts: { display: string; body: string };
+  radius: string;
+  topBar: { visible: boolean; text: string };
+}
+
 export function useStoreSettings() {
   return useQuery({
     queryKey: ['store_settings'],
