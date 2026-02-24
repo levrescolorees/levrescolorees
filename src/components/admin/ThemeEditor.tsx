@@ -230,7 +230,7 @@ const ThemeEditor = ({ onDraftChange }: ThemeEditorProps) => {
           </AccordionTrigger>
           <AccordionContent className="px-5 pb-5">
             <div className="grid sm:grid-cols-3 gap-4">
-              <ColorRow label="Principal" hslValue={draft.tokens.colors.primary} onChange={v => updateColor('primary', v)} contrastAgainst={bg} />
+              <ColorRow label="Principal" hslValue={draft.tokens.colors.primary} onChange={v => updateColor('primary', v)} contrastAgainst={draft.tokens.colors.primary_foreground} />
               <ColorRow label="Principal Clara" hslValue={draft.tokens.colors.primary_light} onChange={v => updateColor('primary_light', v)} />
               <ColorRow label="Brilho / Glow" hslValue={draft.tokens.colors.primary_glow} onChange={v => updateColor('primary_glow', v)} />
             </div>
