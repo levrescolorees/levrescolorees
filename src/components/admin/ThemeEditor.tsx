@@ -24,8 +24,8 @@ function ContrastBadge({ fg, bg }: { fg: string; bg: string }) {
   const result = checkContrast(fg, bg);
   return (
     <span className="inline-flex items-center gap-1 ml-2">
-      <Badge variant={result.levelAA ? 'default' : 'destructive'} className="text-[10px] px-1.5 py-0">
-        {result.ratio}:1 {result.levelAA ? 'AA ✓' : 'Falha'}
+      <Badge variant={result.levelAA ? 'default' : 'secondary'} className="text-[10px] px-1.5 py-0">
+        {result.ratio}:1 {result.levelAA ? '✓ Boa legibilidade' : '⚠ Baixo contraste'}
       </Badge>
     </span>
   );
