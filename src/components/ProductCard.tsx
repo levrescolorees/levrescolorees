@@ -1,10 +1,9 @@
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Star, ShoppingBag } from 'lucide-react';
+import { Star, ShoppingBag, ImageIcon } from 'lucide-react';
 import { formatCurrency, getSmartPriceFromRules } from '@/hooks/useProducts';
 import type { DBProduct, DBPriceRule, DBVariant } from '@/hooks/useProducts';
 import { useCart } from '@/context/CartContext';
-import collectionImg from '@/assets/collection-lipgloss.jpg';
 
 interface ProductCardProps {
   product: DBProduct & { variants: DBVariant[]; priceRules: DBPriceRule[] };
@@ -51,12 +50,18 @@ const ProductCard = ({ product, index = 0 }: ProductCardProps) => {
     >
       <Link to={`/produto/${product.slug}`} className="block">
         <div className="relative overflow-hidden rounded-sm bg-secondary aspect-[3/4] mb-4">
-          <img
-            src={product.images?.[0] || collectionImg}
-            alt={product.name}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
-            loading="lazy"
-          />
+          {product.images?.[0] ? (
+            <img
+              src={product.images[0]}
+              alt={product.name}
+              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+              loading="lazy"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center">
+              <ImageIcon className="w-12 h-12 text-muted-foreground/50" />
+            </div>
+          )}
           {product.badge && (
             <span className="absolute top-3 left-3 bg-primary text-primary-foreground text-[10px] font-body font-bold tracking-wider uppercase px-3 py-1.5 rounded-sm">
               {product.badge}
