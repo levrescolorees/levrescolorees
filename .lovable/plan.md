@@ -1,22 +1,45 @@
 
 
-## Ajuste da verificacao de contraste da cor Principal
+## Melhorias na importacao em massa de produtos
 
-### Problema
-A badge de contraste da cor "Principal" (primary) esta comparando contra `background`, mas o uso real dessa cor e como fundo de botoes com texto `primary_foreground`. O par correto para verificacao WCAG e `primary` vs `primary_foreground`.
+### Situacao atual
+A importacao CSV basica ja existe e funciona para campos simples. Porem tem limitacoes significativas para uso profissional.
 
-### Mudanca
+### Melhorias propostas
 
-**Arquivo: `src/components/admin/ThemeEditor.tsx`**
+**1. Botao "Baixar Modelo" na pagina de Produtos**
+- Adicionar um botao ao lado do "Importar CSV" que gera e baixa um CSV modelo pre-preenchido com cabecalhos corretos e 2 linhas de exemplo
+- Facilita para o cliente saber exatamente o formato esperado
 
-Na secao "Cores da Marca", o `ColorRow` da cor "Principal" atualmente usa `contrastAgainst={bg}` (onde `bg = draft.tokens.colors.background`).
+**2. Campos adicionais no import**
+- Adicionar suporte a: `badge`, `short_description` (descricao curta), `status` (draft/published), `is_active` (sim/nao)
+- Mapear mais variantes de nomes de coluna em portugues
 
-Alterar para `contrastAgainst={draft.tokens.colors.primary_foreground}`.
+**3. Parser CSV robusto**
+- Tratar campos entre aspas (ex: descricoes com virgula)
+- Usar regex ou parser adequado em vez de `split(',')`
 
-Isso fara a badge mostrar o contraste entre a cor do botao e o texto dentro dele, que e o par realmente relevante para acessibilidade.
+**4. Feedback visual melhorado**
+- Mostrar preview dos dados antes de confirmar a importacao (tabela com as primeiras 5 linhas)
+- Indicar quantas linhas serao importadas e quais foram ignoradas (com motivo)
 
-### Impacto
-- Apenas uma linha alterada
-- Nenhuma mudanca funcional no tema ou nos componentes
-- A badge passara a mostrar o ratio correto (primary vs primary_foreground), que tipicamente sera um contraste alto (texto claro sobre fundo escuro/vibrante)
+### Detalhes tecnicos
+
+**Arquivo: `src/pages/admin/Products.tsx`**
+
+1. Adicionar funcao `downloadTemplate()` que gera CSV modelo:
+```
+Nome,SKU,Preco,Estoque,Descricao,Descricao Curta,Badge,Status
+Produto Exemplo,SKU-001,49.90,100,Descricao completa,Descricao curta,Mais Vendido,ativo
+```
+
+2. Melhorar parser CSV para suportar campos entre aspas usando regex split
+
+3. Adicionar campos extras ao mapeamento: `badge`, `short_description`, `status`
+
+4. Adicionar dialog de preview antes da importacao final com contagem de linhas validas/invalidas
+
+**Mudancas na UI:**
+- Novo botao "Baixar Modelo" (icone Download) ao lado dos botoes existentes
+- Dialog de confirmacao mostrando preview dos dados antes de inserir
 
