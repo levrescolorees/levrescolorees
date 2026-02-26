@@ -1,30 +1,25 @@
 
 
-## Adicionar produtos a coleções em massa
+## Ativar busca no header da loja (icone de lupa)
 
-### O que será feito
+O icone de busca (lupa) ao lado do carrinho no header nao faz nada — e apenas um botao sem funcionalidade (linha 66-68 de `Header.tsx`).
 
-Quando o usuario selecionar produtos na lista do admin (checkboxes que ja existem), alem do botao "Excluir selecionados", aparecera um novo botao "Adicionar a coleção". Ao clicar, abre um dialog com a lista de coleções disponiveis para escolher. Ao confirmar, todos os produtos selecionados serao vinculados a coleção escolhida via tabela `collection_products`.
+### O que sera feito
 
-### Detalhes tecnicos
+Ao clicar na lupa, abre uma barra de busca inline no header. O usuario digita o nome do produto e ao pressionar Enter (ou apos um debounce), e redirecionado para `/colecoes?search=TERMO` onde os produtos sao filtrados pelo texto digitado.
 
-**Arquivo: `src/pages/admin/Products.tsx`**
+### Mudancas
 
-1. Importar `useCollections` de `@/hooks/useProducts` e `Select` components
-2. Adicionar estados: `bulkCollectionOpen` (boolean) e `selectedCollectionId` (string)
-3. Na barra de ações em massa (linha ~378), adicionar botao "Adicionar a coleção" ao lado do "Excluir selecionados"
-4. Adicionar um `Dialog` com um `Select` listando as coleções ativas
-5. Na confirmação: inserir registros em `collection_products` para cada produto selecionado + coleção escolhida, ignorando duplicatas (usando `upsert` ou filtrando existentes)
-6. Invalidar queries de collections e products após sucesso
+**1. `src/components/Header.tsx`**
+- Adicionar estado `searchOpen` e `searchQuery`
+- Ao clicar na lupa, trocar os icones/nav por um input de busca com foco automatico
+- Ao pressionar Enter ou clicar em buscar: navegar para `/colecoes?search=TERMO` usando `useNavigate`
+- Clicar no X ou pressionar Escape fecha a barra de busca
+- No mobile, incluir lupa tambem (atualmente e `hidden md:block`)
 
-**Logica de insert:**
-- Para cada `product_id` em `selectedIds`, inserir `{ collection_id, product_id }` na tabela `collection_products`
-- Usar `.upsert()` com `onConflict` ou fazer insert com `ignoreDuplicates: true` para evitar erro se o produto ja esta na coleção
-- Como a tabela pode nao ter constraint unique em (collection_id, product_id), primeiro buscar os registros existentes e inserir apenas os novos
-
-**UI do dialog:**
-- Titulo: "Adicionar a coleção"
-- Select dropdown com todas as coleções ativas
-- Botões "Cancelar" e "Confirmar"
-- Toast de sucesso com contagem
+**2. `src/pages/Collections.tsx`**
+- Ler o parametro `search` da URL (`searchParams.get('search')`)
+- Adicionar filtro por nome/descricao no `useMemo` de `filtered`: `p.name.toLowerCase().includes(searchTerm)` ou `p.short_description.toLowerCase().includes(searchTerm)`
+- Mostrar o termo buscado na interface (ex: "Resultados para: batom")
+- Botao para limpar a busca
 
