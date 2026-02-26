@@ -1,40 +1,44 @@
 
 
-## Planilha com 6 colunas de imagem individuais
+## Erro ao excluir produtos — FK com order_items
 
-### Problema atual
-A coluna `Imagens` usa URLs separadas por `|` numa unica celula. Isso e confuso no Excel/Google Sheets — o usuario prefere ter colunas separadas para cada foto.
+### Diagnostico
 
-### Mudanca proposta
+A tabela `order_items` tem uma foreign key `order_items_product_id_fkey` que referencia `products` com regra **NO ACTION** (nao permite deletar). Quando voce tenta excluir um produto que ja foi comprado em algum pedido, o banco rejeita a operacao.
 
-Substituir a coluna unica `Imagens` por 6 colunas individuais: `Imagem 1`, `Imagem 2`, `Imagem 3`, `Imagem 4`, `Imagem 5`, `Imagem 6`.
+As outras tabelas (`product_variants`, `price_rules`, `collection_products`) ja usam **CASCADE** e funcionam normalmente.
 
-### Arquivo: `src/pages/admin/Products.tsx`
+### Correcao
 
-**1. Template CSV (`downloadTemplate`)**
-- Header: `...;Imagem 1;Imagem 2;Imagem 3;Imagem 4;Imagem 5;Imagem 6`
-- Exemplo com 2 URLs preenchidas e 4 vazias
+**1. Migracao SQL — alterar a FK de `order_items.product_id` para SET NULL**
 
-**2. Parser (`parseRows`)**
-- Buscar colunas `imagem 1` ate `imagem 6` (alem de manter compatibilidade com `imagens` separadas por `|`)
-- Montar o array `images` a partir das 6 colunas individuais, filtrando vazias
-- Se nenhuma coluna individual for encontrada, cai no fallback da coluna `imagens` com `|`
+Isso faz sentido porque os pedidos devem ser preservados mesmo apos excluir um produto. O campo `product_name` ja armazena o nome do produto no item do pedido, entao o historico nao se perde.
 
-**3. Exportacao (`exportCSV`)**
-- Substituir a coluna unica `Imagens` pelas 6 colunas `Imagem 1` a `Imagem 6`
-- Distribuir o array `images` do produto entre as 6 colunas
-
-**4. Preview da importacao**
-- Nenhuma mudanca necessaria — o preview ja mostra os dados parseados
-
-### Exemplo do novo template
-
-```text
-Nome;SKU;Preco Custo;Preco Venda;Estoque;Descricao Curta;Descricao;Badge;Status;Revenda;Margem Sugerida;Rating;Reviews;SEO Titulo;Meta Descricao;Imagem 1;Imagem 2;Imagem 3;Imagem 4;Imagem 5;Imagem 6
-Batom Matte Rosa;SKU-001;25,00;49,90;100;Batom matte;Descricao longa;Mais Vendido;ativo;sim;50;4.8;120;SEO Title;Meta desc;https://ex.com/foto1.jpg;https://ex.com/foto2.jpg;;;;
+```sql
+ALTER TABLE order_items
+  DROP CONSTRAINT order_items_product_id_fkey,
+  ADD CONSTRAINT order_items_product_id_fkey
+    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL;
 ```
 
-### Compatibilidade
-- O parser continua aceitando a coluna antiga `Imagens` com `|` como fallback
-- Se o usuario usar o formato antigo, funciona normalmente
+Tambem alterar `variant_id` (mesma logica):
+```sql
+ALTER TABLE order_items
+  DROP CONSTRAINT order_items_variant_id_fkey,
+  ADD CONSTRAINT order_items_variant_id_fkey
+    FOREIGN KEY (variant_id) REFERENCES product_variants(id) ON DELETE SET NULL;
+```
+
+**2. Nenhuma mudanca no codigo**
+
+O codigo de exclusao em massa ja esta correto. O erro vem exclusivamente da restricao do banco.
+
+### Resultado
+Apos a migracao, ao excluir um produto que ja foi pedido, o `product_id` nos itens do pedido sera setado para `null`, mantendo o historico do pedido intacto (nome, preco, quantidade continuam salvos).
+
+### Arquivo afetado
+
+| Arquivo | Mudanca |
+|---------|---------|
+| Migracao SQL | Alterar FK de `order_items` para SET NULL |
 
