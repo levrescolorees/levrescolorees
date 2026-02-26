@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Search, ToggleLeft, ToggleRight, Pencil, Trash2, Download, Upload } from 'lucide-react';
+import { Plus, Search, ToggleLeft, ToggleRight, Pencil, Trash2, Download, Upload, FileDown } from 'lucide-react';
 import { useAdminProducts, useDeleteProduct, useToggleProduct, formatCurrency } from '@/hooks/useProducts';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
@@ -12,6 +12,109 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+} from '@/components/ui/dialog';
+
+/* ── CSV helpers ── */
+
+function parseCSVLine(line: string): string[] {
+  const result: string[] = [];
+  let current = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQuotes) {
+      if (ch === '"' && line[i + 1] === '"') { current += '"'; i++; }
+      else if (ch === '"') { inQuotes = false; }
+      else { current += ch; }
+    } else {
+      if (ch === '"') { inQuotes = true; }
+      else if (ch === ',') { result.push(current.trim()); current = ''; }
+      else { current += ch; }
+    }
+  }
+  result.push(current.trim());
+  return result;
+}
+
+function findCol(headers: string[], ...aliases: string[]) {
+  return headers.findIndex(h => aliases.some(a => h.includes(a)));
+}
+
+type ParsedRow = {
+  name: string;
+  slug: string;
+  sku: string | null;
+  retail_price: number;
+  stock: number;
+  description: string;
+  short_description: string;
+  badge: string | null;
+  status: string;
+  is_active: boolean;
+};
+
+function parseRows(text: string): { valid: ParsedRow[]; skipped: { line: number; reason: string }[] } {
+  const lines = text.split(/\r?\n/).filter(l => l.trim());
+  if (lines.length < 2) return { valid: [], skipped: [] };
+
+  const headers = parseCSVLine(lines[0]).map(h => h.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
+
+  const nameIdx = findCol(headers, 'nome', 'name');
+  const skuIdx = findCol(headers, 'sku');
+  const priceIdx = findCol(headers, 'preco', 'price', 'retail_price');
+  const stockIdx = findCol(headers, 'estoque', 'stock');
+  const descIdx = findCol(headers, 'descricao', 'description');
+  const shortDescIdx = findCol(headers, 'descricao curta', 'short_description', 'descricao_curta');
+  const badgeIdx = findCol(headers, 'badge', 'selo');
+  const statusIdx = findCol(headers, 'status');
+
+  if (nameIdx === -1) return { valid: [], skipped: [{ line: 1, reason: 'Coluna "Nome" não encontrada' }] };
+
+  const valid: ParsedRow[] = [];
+  const skipped: { line: number; reason: string }[] = [];
+
+  lines.slice(1).forEach((line, i) => {
+    const cols = parseCSVLine(line);
+    const name = cols[nameIdx] || '';
+    if (!name) { skipped.push({ line: i + 2, reason: 'Nome vazio' }); return; }
+    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') + '-' + Date.now().toString(36);
+
+    const statusRaw = statusIdx >= 0 ? (cols[statusIdx] || '').toLowerCase() : '';
+    const isActiveFromStatus = statusRaw === 'inativo' || statusRaw === 'inactive' ? false : true;
+    const dbStatus = statusRaw === 'publicado' || statusRaw === 'published' || statusRaw === 'ativo' || statusRaw === 'active' ? 'published' : 'draft';
+
+    valid.push({
+      name,
+      slug,
+      sku: skuIdx >= 0 ? cols[skuIdx] || null : null,
+      retail_price: priceIdx >= 0 ? Number(cols[priceIdx]) || 0 : 0,
+      stock: stockIdx >= 0 ? Number(cols[stockIdx]) || 0 : 0,
+      description: descIdx >= 0 ? cols[descIdx] || '' : '',
+      short_description: shortDescIdx >= 0 ? cols[shortDescIdx] || '' : '',
+      badge: badgeIdx >= 0 ? cols[badgeIdx] || null : null,
+      status: dbStatus,
+      is_active: isActiveFromStatus,
+    });
+  });
+
+  return { valid, skipped };
+}
+
+function downloadTemplate() {
+  const csv = [
+    'Nome,SKU,Preco,Estoque,Descricao,Descricao Curta,Badge,Status',
+    '"Batom Matte Rosa",SKU-001,49.90,100,"Batom de longa duração com acabamento matte","Batom matte","Mais Vendido",ativo',
+    '"Gloss Labial Nude",SKU-002,39.90,50,"Gloss com brilho natural","Gloss nude",,ativo',
+  ].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = 'modelo-produtos.csv'; a.click();
+  URL.revokeObjectURL(url);
+}
+
+/* ── Component ── */
 
 const Products = () => {
   const { data: products, isLoading } = useAdminProducts();
@@ -21,6 +124,10 @@ const Products = () => {
   const [search, setSearch] = useState('');
   const [importing, setImporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Preview state
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewData, setPreviewData] = useState<{ valid: ParsedRow[]; skipped: { line: number; reason: string }[] }>({ valid: [], skipped: [] });
 
   const filtered = products?.filter(p =>
     p.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -37,50 +144,42 @@ const Products = () => {
     const a = document.createElement('a'); a.href = url; a.download = 'produtos.csv'; a.click();
   };
 
-  const importCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setImporting(true);
     try {
       const text = await file.text();
-      const lines = text.split('\n').filter(l => l.trim());
-      if (lines.length < 2) { toast.error('CSV vazio ou sem dados.'); return; }
-      const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
-      const nameIdx = headers.findIndex(h => h === 'nome' || h === 'name');
-      const skuIdx = headers.findIndex(h => h === 'sku');
-      const priceIdx = headers.findIndex(h => h.includes('preco') || h.includes('preço') || h === 'price' || h === 'retail_price');
-      const stockIdx = headers.findIndex(h => h === 'estoque' || h === 'stock');
-      const descIdx = headers.findIndex(h => h.includes('descri') || h === 'description');
+      const result = parseRows(text);
+      if (!result.valid.length && !result.skipped.length) {
+        toast.error('CSV vazio ou sem dados.');
+        return;
+      }
+      if (!result.valid.length) {
+        toast.error('Nenhum produto válido encontrado. Verifique se a coluna "Nome" existe.');
+        return;
+      }
+      setPreviewData(result);
+      setPreviewOpen(true);
+    } catch {
+      toast.error('Erro ao ler o arquivo.');
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
 
-      if (nameIdx === -1) { toast.error('Coluna "Nome" não encontrada no CSV.'); return; }
-
-      const rows = lines.slice(1).map(line => {
-        const cols = line.split(',').map(c => c.trim());
-        const name = cols[nameIdx] || '';
-        if (!name) return null;
-        const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-        return {
-          name,
-          slug: slug + '-' + Date.now().toString(36),
-          sku: skuIdx >= 0 ? cols[skuIdx] || null : null,
-          retail_price: priceIdx >= 0 ? Number(cols[priceIdx]) || 0 : 0,
-          stock: stockIdx >= 0 ? Number(cols[stockIdx]) || 0 : 0,
-          description: descIdx >= 0 ? cols[descIdx] || '' : '',
-          short_description: '',
-        };
-      }).filter(Boolean);
-
-      if (!rows.length) { toast.error('Nenhum produto válido encontrado.'); return; }
-
-      const { error } = await supabase.from('products').insert(rows as any[]);
+  const confirmImport = async () => {
+    setImporting(true);
+    setPreviewOpen(false);
+    try {
+      const { error } = await supabase.from('products').insert(previewData.valid as any[]);
       if (error) throw error;
       qc.invalidateQueries({ queryKey: ['admin', 'products'] });
-      toast.success(`${rows.length} produto(s) importado(s)!`);
+      toast.success(`${previewData.valid.length} produto(s) importado(s)!`);
     } catch (err: any) {
       toast.error('Erro na importação: ' + (err.message || 'Tente novamente.'));
     } finally {
       setImporting(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
+      setPreviewData({ valid: [], skipped: [] });
     }
   };
 
@@ -89,12 +188,15 @@ const Products = () => {
       <div className="flex items-center justify-between">
         <h1 className="font-display text-2xl font-bold text-foreground">Produtos</h1>
         <div className="flex items-center gap-2">
-          <input ref={fileInputRef} type="file" accept=".csv" className="hidden" onChange={importCSV} />
-          <Button variant="outline" onClick={() => fileInputRef.current?.click()} disabled={importing}>
+          <input ref={fileInputRef} type="file" accept=".csv" className="hidden" onChange={handleFileSelect} />
+          <Button variant="outline" size="sm" onClick={downloadTemplate}>
+            <FileDown className="w-4 h-4 mr-2" /> Baixar Modelo
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={importing}>
             <Upload className="w-4 h-4 mr-2" /> {importing ? 'Importando...' : 'Importar CSV'}
           </Button>
-          <Button variant="outline" onClick={exportCSV}><Download className="w-4 h-4 mr-2" /> Exportar</Button>
-          <Button asChild>
+          <Button variant="outline" size="sm" onClick={exportCSV}><Download className="w-4 h-4 mr-2" /> Exportar</Button>
+          <Button size="sm" asChild>
             <Link to="/admin/produtos/novo">
               <Plus className="w-4 h-4 mr-2" /> Novo Produto
             </Link>
@@ -191,6 +293,65 @@ const Products = () => {
           </table>
         </div>
       </div>
+
+      {/* Import Preview Dialog */}
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Confirmar importação</DialogTitle>
+            <DialogDescription>
+              {previewData.valid.length} produto(s) válido(s) encontrado(s).
+              {previewData.skipped.length > 0 && ` ${previewData.skipped.length} linha(s) ignorada(s).`}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border bg-muted/50">
+                  <th className="text-left px-3 py-2 font-body text-xs text-muted-foreground">Nome</th>
+                  <th className="text-left px-3 py-2 font-body text-xs text-muted-foreground">SKU</th>
+                  <th className="text-left px-3 py-2 font-body text-xs text-muted-foreground">Preço</th>
+                  <th className="text-left px-3 py-2 font-body text-xs text-muted-foreground">Estoque</th>
+                  <th className="text-left px-3 py-2 font-body text-xs text-muted-foreground">Badge</th>
+                  <th className="text-left px-3 py-2 font-body text-xs text-muted-foreground">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {previewData.valid.slice(0, 5).map((row, i) => (
+                  <tr key={i} className="border-b border-border">
+                    <td className="px-3 py-2 font-body text-foreground">{row.name}</td>
+                    <td className="px-3 py-2 font-body text-muted-foreground">{row.sku || '—'}</td>
+                    <td className="px-3 py-2 font-body text-foreground">R$ {row.retail_price.toFixed(2)}</td>
+                    <td className="px-3 py-2 font-body text-foreground">{row.stock}</td>
+                    <td className="px-3 py-2 font-body text-muted-foreground">{row.badge || '—'}</td>
+                    <td className="px-3 py-2 font-body text-muted-foreground">{row.status}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {previewData.valid.length > 5 && (
+              <p className="text-xs text-muted-foreground px-3 py-2">...e mais {previewData.valid.length - 5} produto(s)</p>
+            )}
+          </div>
+
+          {previewData.skipped.length > 0 && (
+            <div className="bg-muted/50 rounded-md p-3 text-xs text-muted-foreground space-y-1">
+              <p className="font-semibold">Linhas ignoradas:</p>
+              {previewData.skipped.map((s, i) => (
+                <p key={i}>Linha {s.line}: {s.reason}</p>
+              ))}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPreviewOpen(false)}>Cancelar</Button>
+            <Button onClick={confirmImport} disabled={importing}>
+              {importing ? 'Importando...' : `Importar ${previewData.valid.length} produto(s)`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
