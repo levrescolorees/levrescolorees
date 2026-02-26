@@ -481,6 +481,7 @@ export type Database = {
       products: {
         Row: {
           badge: string | null
+          cost_price: number
           created_at: string
           description: string
           id: string
@@ -504,6 +505,7 @@ export type Database = {
         }
         Insert: {
           badge?: string | null
+          cost_price?: number
           created_at?: string
           description?: string
           id?: string
@@ -527,6 +529,7 @@ export type Database = {
         }
         Update: {
           badge?: string | null
+          cost_price?: number
           created_at?: string
           description?: string
           id?: string

@@ -59,6 +59,7 @@ type ParsedRow = {
   name: string;
   slug: string;
   sku: string | null;
+  cost_price: number;
   retail_price: number;
   stock: number;
   description: string;
@@ -66,6 +67,12 @@ type ParsedRow = {
   badge: string | null;
   status: string;
   is_active: boolean;
+  ideal_for_resale: boolean;
+  suggested_margin: number;
+  rating: number;
+  reviews_count: number;
+  seo_title: string;
+  meta_description: string;
   images: string[];
 };
 
@@ -78,12 +85,19 @@ function parseRows(text: string): { valid: ParsedRow[]; skipped: { line: number;
 
   const nameIdx = findCol(headers, 'nome', 'name');
   const skuIdx = findCol(headers, 'sku');
-  const priceIdx = findCol(headers, 'preco', 'price', 'retail_price');
+  const costPriceIdx = findCol(headers, 'preco custo', 'cost_price', 'custo');
+  const priceIdx = findCol(headers, 'preco venda', 'preco', 'price', 'retail_price');
   const stockIdx = findCol(headers, 'estoque', 'stock');
   const descIdx = findCol(headers, 'descricao', 'description');
   const shortDescIdx = findCol(headers, 'descricao curta', 'short_description', 'descricao_curta');
   const badgeIdx = findCol(headers, 'badge', 'selo');
   const statusIdx = findCol(headers, 'status');
+  const revendaIdx = findCol(headers, 'revenda', 'ideal_for_resale');
+  const margemIdx = findCol(headers, 'margem sugerida', 'suggested_margin', 'margem');
+  const ratingIdx = findCol(headers, 'rating');
+  const reviewsIdx = findCol(headers, 'reviews', 'reviews_count');
+  const seoTitleIdx = findCol(headers, 'seo titulo', 'seo_title');
+  const metaDescIdx = findCol(headers, 'meta descricao', 'meta_description');
   const imagesIdx = findCol(headers, 'imagens', 'images', 'fotos');
   if (nameIdx === -1) return { valid: [], skipped: [{ line: 1, reason: 'Coluna "Nome" não encontrada' }] };
 
@@ -100,10 +114,13 @@ function parseRows(text: string): { valid: ParsedRow[]; skipped: { line: number;
     const isActiveFromStatus = statusRaw === 'inativo' || statusRaw === 'inactive' ? false : true;
     const dbStatus = statusRaw === 'publicado' || statusRaw === 'published' || statusRaw === 'ativo' || statusRaw === 'active' ? 'published' : 'draft';
 
+    const revendaRaw = revendaIdx >= 0 ? (cols[revendaIdx] || '').toLowerCase() : '';
+
     valid.push({
       name,
       slug,
       sku: skuIdx >= 0 ? cols[skuIdx] || null : null,
+      cost_price: costPriceIdx >= 0 ? parsePrice(cols[costPriceIdx] || '0') : 0,
       retail_price: priceIdx >= 0 ? parsePrice(cols[priceIdx] || '0') : 0,
       stock: stockIdx >= 0 ? Number(cols[stockIdx]) || 0 : 0,
       description: descIdx >= 0 ? cols[descIdx] || '' : '',
@@ -112,6 +129,12 @@ function parseRows(text: string): { valid: ParsedRow[]; skipped: { line: number;
       images: imagesIdx >= 0 ? (cols[imagesIdx] || '').split('|').map(u => u.trim()).filter(Boolean) : [],
       status: dbStatus,
       is_active: isActiveFromStatus,
+      ideal_for_resale: revendaRaw === 'sim' || revendaRaw === 'yes' || revendaRaw === 'true' || revendaRaw === '1',
+      suggested_margin: margemIdx >= 0 ? parsePrice(cols[margemIdx] || '0') : 0,
+      rating: ratingIdx >= 0 ? parsePrice(cols[ratingIdx] || '0') : 0,
+      reviews_count: reviewsIdx >= 0 ? Number(cols[reviewsIdx]) || 0 : 0,
+      seo_title: seoTitleIdx >= 0 ? cols[seoTitleIdx] || '' : '',
+      meta_description: metaDescIdx >= 0 ? cols[metaDescIdx] || '' : '',
     });
   });
 
@@ -120,9 +143,9 @@ function parseRows(text: string): { valid: ParsedRow[]; skipped: { line: number;
 
 function downloadTemplate() {
   const csv = '\uFEFF' + [
-    'Nome;SKU;Preco;Estoque;Descricao;Descricao Curta;Badge;Status;Imagens',
-    'Batom Matte Rosa;SKU-001;49,90;100;Batom de longa duração com acabamento matte;Batom matte;Mais Vendido;ativo;https://exemplo.com/foto1.jpg|https://exemplo.com/foto2.jpg',
-    'Gloss Labial Nude;SKU-002;39,90;50;Gloss com brilho natural;Gloss nude;;ativo;',
+    'Nome;SKU;Preco Custo;Preco Venda;Estoque;Descricao Curta;Descricao;Badge;Status;Revenda;Margem Sugerida;Rating;Reviews;SEO Titulo;Meta Descricao;Imagens',
+    'Batom Matte Rosa;SKU-001;25,00;49,90;100;Batom matte;Batom de longa duracao com acabamento matte;Mais Vendido;ativo;sim;50;4.8;120;Batom Matte Rosa - Levres;Batom matte de longa duracao;https://exemplo.com/foto1.jpg|https://exemplo.com/foto2.jpg',
+    'Gloss Labial Nude;SKU-002;18,00;39,90;50;Gloss nude;Gloss com brilho natural;;ativo;nao;0;0;0;;;',
   ].join('\n');
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
@@ -153,10 +176,18 @@ const Products = () => {
 
   const exportCSV = () => {
     if (!filtered.length) return;
-    const headers = ['Nome', 'SKU', 'Preço', 'Estoque', 'Status'];
-    const rows = filtered.map(p => [p.name, p.sku || '', p.retail_price, p.stock, p.is_active ? 'Ativo' : 'Inativo']);
-    const csv = [headers, ...rows].map(r => r.join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
+    const headers = ['Nome', 'SKU', 'Preco Custo', 'Preco Venda', 'Estoque', 'Descricao Curta', 'Descricao', 'Badge', 'Status', 'Revenda', 'Margem Sugerida', 'Rating', 'Reviews', 'SEO Titulo', 'Meta Descricao', 'Imagens'];
+    const rows = filtered.map(p => [
+      p.name, p.sku || '', (p as any).cost_price || 0, p.retail_price, p.stock,
+      p.short_description || '', p.description || '', p.badge || '',
+      p.is_active ? 'ativo' : 'inativo',
+      p.ideal_for_resale ? 'sim' : 'nao', p.suggested_margin || 0,
+      p.rating || 0, p.reviews_count || 0,
+      p.seo_title || '', p.meta_description || '',
+      (p.images || []).join('|'),
+    ]);
+    const csv = '\uFEFF' + [headers, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(';')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href = url; a.download = 'produtos.csv'; a.click();
   };
@@ -331,9 +362,9 @@ const Products = () => {
                 <tr className="border-b border-border bg-muted/50">
                   <th className="text-left px-3 py-2 font-body text-xs text-muted-foreground">Nome</th>
                   <th className="text-left px-3 py-2 font-body text-xs text-muted-foreground">SKU</th>
-                  <th className="text-left px-3 py-2 font-body text-xs text-muted-foreground">Preço</th>
+                  <th className="text-left px-3 py-2 font-body text-xs text-muted-foreground">Custo</th>
+                  <th className="text-left px-3 py-2 font-body text-xs text-muted-foreground">Venda</th>
                   <th className="text-left px-3 py-2 font-body text-xs text-muted-foreground">Estoque</th>
-                  <th className="text-left px-3 py-2 font-body text-xs text-muted-foreground">Badge</th>
                   <th className="text-left px-3 py-2 font-body text-xs text-muted-foreground">Status</th>
                 </tr>
               </thead>
@@ -342,9 +373,9 @@ const Products = () => {
                   <tr key={i} className="border-b border-border">
                     <td className="px-3 py-2 font-body text-foreground">{row.name}</td>
                     <td className="px-3 py-2 font-body text-muted-foreground">{row.sku || '—'}</td>
+                    <td className="px-3 py-2 font-body text-foreground">R$ {row.cost_price.toFixed(2)}</td>
                     <td className="px-3 py-2 font-body text-foreground">R$ {row.retail_price.toFixed(2)}</td>
                     <td className="px-3 py-2 font-body text-foreground">{row.stock}</td>
-                    <td className="px-3 py-2 font-body text-muted-foreground">{row.badge || '—'}</td>
                     <td className="px-3 py-2 font-body text-muted-foreground">{row.status}</td>
                   </tr>
                 ))}

@@ -26,6 +26,7 @@ interface FormData {
   short_description: string;
   description: string;
   retail_price: string;
+  cost_price: string;
   stock: string;
   badge: string;
   is_active: boolean;
@@ -42,7 +43,7 @@ interface FormData {
 
 const emptyForm: FormData = {
   name: '', slug: '', sku: '', short_description: '', description: '',
-  retail_price: '', stock: '0', badge: '', is_active: false,
+  retail_price: '', cost_price: '0', stock: '0', badge: '', is_active: false,
   ideal_for_resale: false, suggested_margin: '0', rating: '0', reviews_count: '0',
   status: 'draft', published_at: null, seo_title: '', meta_description: '', images: [],
 };
@@ -73,7 +74,7 @@ const ProductForm = () => {
       setForm({
         name: product.name, slug: product.slug, sku: product.sku || '',
         short_description: product.short_description, description: product.description,
-        retail_price: String(product.retail_price), stock: String(product.stock),
+        retail_price: String(product.retail_price), cost_price: String((product as any).cost_price || 0), stock: String(product.stock),
         badge: product.badge || '', is_active: product.is_active,
         ideal_for_resale: product.ideal_for_resale, suggested_margin: String(product.suggested_margin),
         rating: String(product.rating), reviews_count: String(product.reviews_count),
@@ -118,6 +119,7 @@ const ProductForm = () => {
     name: form.name, slug: form.slug, sku: form.sku || null,
     short_description: form.short_description, description: form.description,
     retail_price: parseFloat(form.retail_price) || 0,
+    cost_price: parseFloat(form.cost_price) || 0,
     stock: parseInt(form.stock) || 0, badge: form.badge || null,
     is_active: form.status === 'published',
     ideal_for_resale: form.ideal_for_resale,
@@ -322,8 +324,8 @@ const ProductForm = () => {
             errors={errors}
           />
           <PricingCard
-            retail_price={form.retail_price} stock={form.stock}
-            rating={form.rating} reviews_count={form.reviews_count}
+            retail_price={form.retail_price} cost_price={form.cost_price}
+            stock={form.stock} rating={form.rating} reviews_count={form.reviews_count}
             errors={errors}
             onChange={(f, v) => updateField(f, v)}
           />
