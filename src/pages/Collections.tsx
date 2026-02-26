@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { X } from 'lucide-react';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import CartDrawer from '@/components/CartDrawer';
@@ -19,19 +20,24 @@ interface CollectionsProps {
 }
 
 const Collections = ({ initialFilter = null }: CollectionsProps) => {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const filterParam = searchParams.get('filter');
+  const searchTerm = searchParams.get('search') || '';
   const resolvedFilter = initialFilter ?? filterParam ?? 'all';
   const [activeCollection, setActiveCollection] = useState(resolvedFilter);
   const [activePriceRange, setActivePriceRange] = useState(0);
 
-  // Sync state when URL filter changes (e.g. navigating between Mais Vendidos ↔ Novidades)
   useEffect(() => {
     setActiveCollection(resolvedFilter);
   }, [resolvedFilter]);
 
   const { data: products, isLoading } = useStorefrontProducts();
   const { data: collections } = useCollections();
+
+  const clearSearch = () => {
+    searchParams.delete('search');
+    setSearchParams(searchParams);
+  };
 
   const filtered = useMemo(() => {
     let list = products ?? [];
@@ -40,16 +46,31 @@ const Collections = ({ initialFilter = null }: CollectionsProps) => {
     }
     const range = priceRanges[activePriceRange];
     list = list.filter(p => p.retail_price >= range.min && p.retail_price < range.max);
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      list = list.filter(p =>
+        p.name.toLowerCase().includes(term) ||
+        (p.short_description && p.short_description.toLowerCase().includes(term))
+      );
+    }
     return list;
-  }, [products, activeCollection, activePriceRange]);
+  }, [products, activeCollection, activePriceRange, searchTerm]);
 
   return (
     <div className="min-h-screen bg-background">
       <Header />
       <main className="container mx-auto px-4 py-10 md:py-16">
         <div className="text-center mb-10">
-          <h1 className="font-display text-3xl md:text-4xl font-semibold text-foreground mb-2">Coleções</h1>
-          <p className="font-body text-muted-foreground">Encontre o produto perfeito para você ou para revenda</p>
+          <h1 className="font-display text-3xl md:text-4xl font-semibold text-foreground mb-2">
+            {searchTerm ? `Resultados para "${searchTerm}"` : 'Coleções'}
+          </h1>
+          {searchTerm ? (
+            <button onClick={clearSearch} className="text-sm font-body text-primary hover:underline mt-1">
+              Limpar busca
+            </button>
+          ) : (
+            <p className="font-body text-muted-foreground">Encontre o produto perfeito para você ou para revenda</p>
+          )}
         </div>
 
         <div className="mb-8 space-y-4">

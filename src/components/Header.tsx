@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, useRef, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { ShoppingBag, Menu, X, Search } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -9,8 +9,31 @@ import { useTheme } from '@/components/ThemeProvider';
 const Header = () => {
   const { totalItems, setIsCartOpen } = useCart();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const navigate = useNavigate();
   const { data: settings } = useStoreSettings();
   const { theme: activeTheme } = useTheme();
+
+  useEffect(() => {
+    if (searchOpen) searchInputRef.current?.focus();
+  }, [searchOpen]);
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    const q = searchQuery.trim();
+    if (q) {
+      navigate(`/colecoes?search=${encodeURIComponent(q)}`);
+      setSearchOpen(false);
+      setSearchQuery('');
+    }
+  };
+
+  const closeSearch = () => {
+    setSearchOpen(false);
+    setSearchQuery('');
+  };
 
   const brandName = settings?.brand?.name || 'Lèvres Colorées';
   const logoUrl = activeTheme?.components?.images?.logo || '';
@@ -50,20 +73,45 @@ const Header = () => {
             )}
           </Link>
 
-          <nav className="hidden md:flex items-center gap-8">
-            {navLinks.map(link => (
-              <Link
-                key={link.to + link.label}
-                to={link.to}
-                className="text-sm font-body font-medium text-muted-foreground hover:text-primary transition-colors tracking-wide"
+          <AnimatePresence mode="wait">
+            {searchOpen ? (
+              <motion.form
+                key="search"
+                initial={{ opacity: 0, width: 0 }}
+                animate={{ opacity: 1, width: 'auto' }}
+                exit={{ opacity: 0, width: 0 }}
+                onSubmit={handleSearch}
+                className="flex items-center gap-2"
               >
-                {link.label}
-              </Link>
-            ))}
-          </nav>
+                <input
+                  ref={searchInputRef}
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  onKeyDown={e => e.key === 'Escape' && closeSearch()}
+                  placeholder="Buscar produtos..."
+                  className="w-48 lg:w-64 px-3 py-1.5 text-sm font-body border border-border rounded-sm bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+                <button type="button" onClick={closeSearch} className="p-1 text-muted-foreground hover:text-foreground">
+                  <X className="w-4 h-4" />
+                </button>
+              </motion.form>
+            ) : (
+              <motion.nav key="nav" className="hidden md:flex items-center gap-8">
+                {navLinks.map(link => (
+                  <Link
+                    key={link.to + link.label}
+                    to={link.to}
+                    className="text-sm font-body font-medium text-muted-foreground hover:text-primary transition-colors tracking-wide"
+                  >
+                    {link.label}
+                  </Link>
+                ))}
+              </motion.nav>
+            )}
+          </AnimatePresence>
 
           <div className="flex items-center gap-3">
-            <button className="hidden md:block p-2 text-foreground hover:text-primary transition-colors">
+            <button onClick={() => setSearchOpen(o => !o)} className="p-2 text-foreground hover:text-primary transition-colors">
               <Search className="w-5 h-5" />
             </button>
             <button
