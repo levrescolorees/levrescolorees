@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Save, Truck, Palette, Type, Plus, Trash2, Paintbrush, ExternalLink } from 'lucide-react';
+import { Save, Truck, Palette, Type, Plus, Trash2, Paintbrush, ExternalLink, Users, Shield, ShieldCheck } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -11,12 +11,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { toast } from 'sonner';
 
 import { useStoreSettings, useShippingRules } from '@/hooks/useStoreSettings';
-
+import { useAdminUsers } from '@/hooks/useAdminUsers';
 // ─── Component ────────────────────────────────────────────
 const AdminSettings = () => {
   const qc = useQueryClient();
   const { data: settings, isLoading: loadingSettings } = useStoreSettings();
   const { data: shippingRules, isLoading: loadingShipping } = useShippingRules();
+  const { data: adminUsers, isLoading: loadingUsers, createUser, deleteUserRoles } = useAdminUsers();
 
   // Brand settings
   const [brandName, setBrandName] = useState('');
@@ -34,6 +35,12 @@ const AdminSettings = () => {
   const [newRuleValue, setNewRuleValue] = useState('0');
   const [newRuleState, setNewRuleState] = useState('');
   const [newRuleFreeMin, setNewRuleFreeMin] = useState('');
+
+  // User form
+  const [newUserEmail, setNewUserEmail] = useState('');
+  const [newUserPassword, setNewUserPassword] = useState('');
+  const [newUserName, setNewUserName] = useState('');
+  const [newUserRole, setNewUserRole] = useState<'super_admin' | 'admin_only'>('admin_only');
 
   useEffect(() => {
     if (settings) {
@@ -110,6 +117,7 @@ const AdminSettings = () => {
           <TabsTrigger value="brand" className="font-body"><Palette className="w-4 h-4 mr-1.5" /> Marca</TabsTrigger>
           <TabsTrigger value="hero" className="font-body"><Type className="w-4 h-4 mr-1.5" /> Hero / Home</TabsTrigger>
           <TabsTrigger value="shipping" className="font-body"><Truck className="w-4 h-4 mr-1.5" /> Frete</TabsTrigger>
+          <TabsTrigger value="users" className="font-body"><Users className="w-4 h-4 mr-1.5" /> Usuários</TabsTrigger>
         </TabsList>
 
         {/* ─── Theme ─────────────────────────────── */}
@@ -246,6 +254,105 @@ const AdminSettings = () => {
               </div>
               <Button onClick={() => addShippingRule.mutate()} disabled={addShippingRule.isPending}>
                 <Plus className="w-4 h-4 mr-2" /> Adicionar Regra
+              </Button>
+            </div>
+          </div>
+        </TabsContent>
+        {/* ─── Users ──────────────────────────── */}
+        <TabsContent value="users">
+          <div className="space-y-6">
+            {/* User list */}
+            <div className="bg-card rounded-lg shadow-soft p-6 space-y-4">
+              <h2 className="font-display text-lg font-semibold text-foreground">Usuários do Sistema</h2>
+              {loadingUsers ? (
+                <p className="font-body text-sm text-muted-foreground">Carregando...</p>
+              ) : !adminUsers?.length ? (
+                <p className="font-body text-sm text-muted-foreground">Nenhum usuário encontrado.</p>
+              ) : (
+                <div className="space-y-2">
+                  {adminUsers.map(u => (
+                    <div key={u.user_id} className="flex items-center justify-between bg-muted/30 rounded-md px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        {u.type === 'super_admin' ? (
+                          <ShieldCheck className="w-5 h-5 text-primary" />
+                        ) : (
+                          <Shield className="w-5 h-5 text-muted-foreground" />
+                        )}
+                        <div>
+                          <span className="font-body text-sm font-medium text-foreground">{u.name || u.email}</span>
+                          <span className="font-body text-xs text-muted-foreground ml-2">{u.email}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-body text-xs px-2 py-1 rounded bg-muted text-muted-foreground">
+                          {u.type === 'super_admin' ? 'Super Admin' : 'Admin'}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            if (confirm('Remover todas as roles deste usuário?')) {
+                              deleteUserRoles.mutate(u.user_id, {
+                                onSuccess: () => toast.success('Roles removidas.'),
+                                onError: () => toast.error('Erro ao remover.'),
+                              });
+                            }
+                          }}
+                        >
+                          <Trash2 className="w-4 h-4 text-destructive" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Add user form */}
+            <div className="bg-card rounded-lg shadow-soft p-6 space-y-4 max-w-xl">
+              <h2 className="font-display text-lg font-semibold text-foreground">Adicionar Usuário</h2>
+              <div>
+                <label className="font-body text-sm font-medium text-foreground">Nome</label>
+                <Input value={newUserName} onChange={e => setNewUserName(e.target.value)} className="font-body mt-1" placeholder="Nome completo" />
+              </div>
+              <div>
+                <label className="font-body text-sm font-medium text-foreground">E-mail</label>
+                <Input type="email" value={newUserEmail} onChange={e => setNewUserEmail(e.target.value)} className="font-body mt-1" placeholder="email@exemplo.com" />
+              </div>
+              <div>
+                <label className="font-body text-sm font-medium text-foreground">Senha</label>
+                <Input type="password" value={newUserPassword} onChange={e => setNewUserPassword(e.target.value)} className="font-body mt-1" placeholder="Mínimo 6 caracteres" />
+              </div>
+              <div>
+                <label className="font-body text-sm font-medium text-foreground">Tipo</label>
+                <Select value={newUserRole} onValueChange={v => setNewUserRole(v as 'super_admin' | 'admin_only')}>
+                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="super_admin">Super Admin (acesso financeiro)</SelectItem>
+                    <SelectItem value="admin_only">Admin (sem acesso financeiro)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button
+                onClick={() => {
+                  if (!newUserEmail || !newUserPassword || !newUserName) {
+                    toast.error('Preencha todos os campos.');
+                    return;
+                  }
+                  createUser.mutate(
+                    { email: newUserEmail, password: newUserPassword, name: newUserName, role: newUserRole },
+                    {
+                      onSuccess: () => {
+                        toast.success('Usuário criado com sucesso!');
+                        setNewUserEmail(''); setNewUserPassword(''); setNewUserName('');
+                      },
+                      onError: (err: any) => toast.error(err?.message || 'Erro ao criar usuário.'),
+                    }
+                  );
+                }}
+                disabled={createUser.isPending}
+              >
+                <Plus className="w-4 h-4 mr-2" /> Criar Usuário
               </Button>
             </div>
           </div>
