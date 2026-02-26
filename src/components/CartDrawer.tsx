@@ -76,7 +76,7 @@ const CartDrawer = () => {
                   const smart = getSmartPrice(item.product.retailPrice, item.product.box06Price, item.product.box12Price, item.quantity);
                   return (
                     <motion.div
-                      key={item.product.id}
+                      key={`${item.product.id}-${item.selectedColor}`}
                       layout
                       initial={{ opacity: 0, x: 20 }}
                       animate={{ opacity: 1, x: 0 }}

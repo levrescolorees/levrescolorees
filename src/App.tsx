@@ -1,3 +1,4 @@
+import { Suspense, lazy } from 'react';
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -6,30 +7,41 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { CartProvider } from "@/context/CartContext";
 import { AuthProvider } from "@/hooks/useAuth";
 import ThemeProvider from "@/components/ThemeProvider";
-import Index from "./pages/Index";
-import Collections from "./pages/Collections";
-import ProductDetail from "./pages/ProductDetail";
-import Cart from "./pages/Cart";
-import Atacado from "./pages/Atacado";
-import Checkout from "./pages/Checkout";
-import OrderTracking from "./pages/OrderTracking";
-import NotFound from "./pages/NotFound";
-import AdminLogin from "./pages/admin/AdminLogin";
-import AdminLayout from "./pages/admin/AdminLayout";
-import Dashboard from "./pages/admin/Dashboard";
-import Products from "./pages/admin/Products";
-import ProductForm from "./pages/admin/ProductForm";
-import AdminCollections from "./pages/admin/AdminCollections";
-import AdminOrders from "./pages/admin/AdminOrders";
-import OrderDetail from "./pages/admin/OrderDetail";
-import AdminCustomers from "./pages/admin/AdminCustomers";
-import AdminCoupons from "./pages/admin/AdminCoupons";
-import AdminSettings from "./pages/admin/AdminSettings";
-import AdminMedia from "./pages/admin/AdminMedia";
-import AdminIntegrations from "./pages/admin/AdminIntegrations";
-import AdminThemeEditor from "./pages/admin/AdminThemeEditor";
+import { Loader2 } from 'lucide-react';
+
+// Lazy-loaded storefront routes
+const Index = lazy(() => import("./pages/Index"));
+const Collections = lazy(() => import("./pages/Collections"));
+const ProductDetail = lazy(() => import("./pages/ProductDetail"));
+const Cart = lazy(() => import("./pages/Cart"));
+const Atacado = lazy(() => import("./pages/Atacado"));
+const Checkout = lazy(() => import("./pages/Checkout"));
+const OrderTracking = lazy(() => import("./pages/OrderTracking"));
+const NotFound = lazy(() => import("./pages/NotFound"));
+
+// Lazy-loaded admin routes
+const AdminLogin = lazy(() => import("./pages/admin/AdminLogin"));
+const AdminLayout = lazy(() => import("./pages/admin/AdminLayout"));
+const Dashboard = lazy(() => import("./pages/admin/Dashboard"));
+const Products = lazy(() => import("./pages/admin/Products"));
+const ProductForm = lazy(() => import("./pages/admin/ProductForm"));
+const AdminCollections = lazy(() => import("./pages/admin/AdminCollections"));
+const AdminOrders = lazy(() => import("./pages/admin/AdminOrders"));
+const OrderDetail = lazy(() => import("./pages/admin/OrderDetail"));
+const AdminCustomers = lazy(() => import("./pages/admin/AdminCustomers"));
+const AdminCoupons = lazy(() => import("./pages/admin/AdminCoupons"));
+const AdminSettings = lazy(() => import("./pages/admin/AdminSettings"));
+const AdminMedia = lazy(() => import("./pages/admin/AdminMedia"));
+const AdminIntegrations = lazy(() => import("./pages/admin/AdminIntegrations"));
+const AdminThemeEditor = lazy(() => import("./pages/admin/AdminThemeEditor"));
 
 const queryClient = new QueryClient();
+
+const PageLoader = () => (
+  <div className="min-h-screen flex items-center justify-center bg-background">
+    <Loader2 className="w-6 h-6 animate-spin text-primary" />
+  </div>
+);
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -40,35 +52,37 @@ const App = () => (
           <Toaster />
           <Sonner />
           <BrowserRouter>
-            <Routes>
-              {/* Storefront */}
-              <Route path="/" element={<Index />} />
-              <Route path="/colecoes" element={<Collections />} />
-              <Route path="/produto/:slug" element={<ProductDetail />} />
-              <Route path="/carrinho" element={<Cart />} />
-              <Route path="/atacado" element={<Atacado />} />
-              <Route path="/checkout" element={<Checkout />} />
-              <Route path="/rastreio" element={<OrderTracking />} />
+            <Suspense fallback={<PageLoader />}>
+              <Routes>
+                {/* Storefront */}
+                <Route path="/" element={<Index />} />
+                <Route path="/colecoes" element={<Collections />} />
+                <Route path="/produto/:slug" element={<ProductDetail />} />
+                <Route path="/carrinho" element={<Cart />} />
+                <Route path="/atacado" element={<Atacado />} />
+                <Route path="/checkout" element={<Checkout />} />
+                <Route path="/rastreio" element={<OrderTracking />} />
 
-              {/* Admin */}
-              <Route path="/admin/login" element={<AdminLogin />} />
-              <Route path="/admin" element={<AdminLayout />}>
-                <Route index element={<Dashboard />} />
-                <Route path="produtos" element={<Products />} />
-                <Route path="produtos/:id" element={<ProductForm />} />
-                <Route path="colecoes" element={<AdminCollections />} />
-                <Route path="pedidos" element={<AdminOrders />} />
-                <Route path="pedidos/:id" element={<OrderDetail />} />
-                <Route path="clientes" element={<AdminCustomers />} />
-                <Route path="cupons" element={<AdminCoupons />} />
-                <Route path="midia" element={<AdminMedia />} />
-                <Route path="integracoes" element={<AdminIntegrations />} />
-                <Route path="configuracoes" element={<AdminSettings />} />
-                <Route path="theme-editor" element={<AdminThemeEditor />} />
-              </Route>
+                {/* Admin */}
+                <Route path="/admin/login" element={<AdminLogin />} />
+                <Route path="/admin" element={<AdminLayout />}>
+                  <Route index element={<Dashboard />} />
+                  <Route path="produtos" element={<Products />} />
+                  <Route path="produtos/:id" element={<ProductForm />} />
+                  <Route path="colecoes" element={<AdminCollections />} />
+                  <Route path="pedidos" element={<AdminOrders />} />
+                  <Route path="pedidos/:id" element={<OrderDetail />} />
+                  <Route path="clientes" element={<AdminCustomers />} />
+                  <Route path="cupons" element={<AdminCoupons />} />
+                  <Route path="midia" element={<AdminMedia />} />
+                  <Route path="integracoes" element={<AdminIntegrations />} />
+                  <Route path="configuracoes" element={<AdminSettings />} />
+                  <Route path="theme-editor" element={<AdminThemeEditor />} />
+                </Route>
 
-              <Route path="*" element={<NotFound />} />
-            </Routes>
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </Suspense>
           </BrowserRouter>
         </CartProvider>
         </ThemeProvider>

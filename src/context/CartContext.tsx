@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
 import { Product, getSmartPrice } from '@/data/products';
 
 export interface CartItem {
@@ -58,13 +58,13 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   const clearCart = useCallback(() => setItems([]), []);
 
-  const totalItems = items.reduce((sum, i) => sum + i.quantity, 0);
-  const totalRetail = items.reduce((sum, i) => sum + i.product.retailPrice * i.quantity, 0);
-  const totalSmart = items.reduce((sum, i) => {
+  const totalItems = useMemo(() => items.reduce((sum, i) => sum + i.quantity, 0), [items]);
+  const totalRetail = useMemo(() => items.reduce((sum, i) => sum + i.product.retailPrice * i.quantity, 0), [items]);
+  const totalSmart = useMemo(() => items.reduce((sum, i) => {
     const { price } = getSmartPrice(i.product.retailPrice, i.product.box06Price, i.product.box12Price, i.quantity);
     return sum + price * i.quantity;
-  }, 0);
-  const totalSavings = totalRetail - totalSmart;
+  }, 0), [items]);
+  const totalSavings = useMemo(() => totalRetail - totalSmart, [totalRetail, totalSmart]);
 
   return (
     <CartContext.Provider value={{
