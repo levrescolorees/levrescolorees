@@ -116,7 +116,7 @@ function parseRows(text: string): { valid: ParsedRow[]; skipped: { line: number;
     const cols = parseCSVLine(line, sep);
     const name = cols[nameIdx] || '';
     if (!name) { skipped.push({ line: i + 2, reason: 'Nome vazio' }); return; }
-    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') + '-' + Date.now().toString(36);
+    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') + '-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
     const statusRaw = statusIdx >= 0 ? (cols[statusIdx] || '').toLowerCase() : '';
     const isActiveFromStatus = statusRaw === 'inativo' || statusRaw === 'inactive' ? false : true;
@@ -266,12 +266,26 @@ const Products = () => {
   const confirmImport = async () => {
     setImporting(true);
     setPreviewOpen(false);
+    let successCount = 0;
+    let failCount = 0;
     try {
-      const { error } = await supabase.from('products').insert(previewData.valid as any[]);
-      if (error) throw error;
+      // Insert in batches of 20 to avoid payload limits and get better error handling
+      const batch = 20;
+      for (let i = 0; i < previewData.valid.length; i += batch) {
+        const chunk = previewData.valid.slice(i, i + batch);
+        const { error } = await supabase.from('products').insert(chunk as any[]);
+        if (error) {
+          console.error('Import batch error:', error);
+          failCount += chunk.length;
+        } else {
+          successCount += chunk.length;
+        }
+      }
       qc.invalidateQueries({ queryKey: ['admin', 'products'] });
-      toast.success(`${previewData.valid.length} produto(s) importado(s)!`);
+      if (successCount > 0) toast.success(`${successCount} produto(s) importado(s)!`);
+      if (failCount > 0) toast.error(`${failCount} produto(s) falharam. Verifique se não há SKUs duplicados.`);
     } catch (err: any) {
+      console.error('Import error:', err);
       toast.error('Erro na importação: ' + (err.message || 'Tente novamente.'));
     } finally {
       setImporting(false);
