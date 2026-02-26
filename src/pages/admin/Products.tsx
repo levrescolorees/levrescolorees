@@ -1,11 +1,12 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Search, ToggleLeft, ToggleRight, Pencil, Trash2, Download, Upload, FileDown, Image } from 'lucide-react';
+import { Plus, Search, ToggleLeft, ToggleRight, Pencil, Trash2, Download, Upload, FileDown, Image, X } from 'lucide-react';
 import { useAdminProducts, useDeleteProduct, useToggleProduct, formatCurrency } from '@/hooks/useProducts';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -162,8 +163,11 @@ const Products = () => {
   const qc = useQueryClient();
   const [search, setSearch] = useState('');
   const [importing, setImporting] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [bulkImageOpen, setBulkImageOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
 
   // Preview state
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -173,6 +177,38 @@ const Products = () => {
     p.name.toLowerCase().includes(search.toLowerCase()) ||
     p.sku?.toLowerCase().includes(search.toLowerCase())
   ) ?? [];
+
+  // Clear selection when search changes
+  useEffect(() => { setSelectedIds(new Set()); }, [search]);
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    if (selectedIds.size === filtered.length) setSelectedIds(new Set());
+    else setSelectedIds(new Set(filtered.map(p => p.id)));
+  };
+
+  const confirmBulkDelete = async () => {
+    setBulkDeleting(true);
+    try {
+      const { error } = await supabase.from('products').delete().in('id', Array.from(selectedIds));
+      if (error) throw error;
+      qc.invalidateQueries({ queryKey: ['admin', 'products'] });
+      toast.success(`${selectedIds.size} produto(s) excluído(s)!`);
+      setSelectedIds(new Set());
+    } catch (err: any) {
+      toast.error('Erro ao excluir: ' + (err.message || 'Tente novamente.'));
+    } finally {
+      setBulkDeleting(false);
+      setBulkDeleteOpen(false);
+    }
+  };
 
   const exportCSV = () => {
     if (!filtered.length) return;
@@ -265,11 +301,30 @@ const Products = () => {
         />
       </div>
 
+      {/* Bulk action bar */}
+      {selectedIds.size > 0 && (
+        <div className="flex items-center gap-3 bg-muted/80 border border-border rounded-lg px-4 py-2">
+          <span className="font-body text-sm text-foreground font-medium">{selectedIds.size} produto(s) selecionado(s)</span>
+          <Button variant="destructive" size="sm" onClick={() => setBulkDeleteOpen(true)}>
+            <Trash2 className="w-4 h-4 mr-2" /> Excluir selecionados
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())}>
+            <X className="w-4 h-4 mr-2" /> Limpar seleção
+          </Button>
+        </div>
+      )}
+
       <div className="bg-card rounded-lg shadow-soft overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="border-b border-border bg-muted/50">
+                <th className="px-4 py-3 w-10">
+                  <Checkbox
+                    checked={filtered.length > 0 && selectedIds.size === filtered.length}
+                    onCheckedChange={toggleAll}
+                  />
+                </th>
                 <th className="text-left px-4 py-3 font-body text-xs font-semibold text-muted-foreground uppercase tracking-wider">Produto</th>
                 <th className="text-left px-4 py-3 font-body text-xs font-semibold text-muted-foreground uppercase tracking-wider">SKU</th>
                 <th className="text-left px-4 py-3 font-body text-xs font-semibold text-muted-foreground uppercase tracking-wider">Preço</th>
@@ -281,11 +336,17 @@ const Products = () => {
             </thead>
             <tbody>
               {isLoading ? (
-                <tr><td colSpan={7} className="px-4 py-8 text-center font-body text-sm text-muted-foreground">Carregando...</td></tr>
+                <tr><td colSpan={8} className="px-4 py-8 text-center font-body text-sm text-muted-foreground">Carregando...</td></tr>
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={7} className="px-4 py-8 text-center font-body text-sm text-muted-foreground">Nenhum produto encontrado.</td></tr>
+                <tr><td colSpan={8} className="px-4 py-8 text-center font-body text-sm text-muted-foreground">Nenhum produto encontrado.</td></tr>
               ) : filtered.map(p => (
                 <tr key={p.id} className="border-b border-border hover:bg-muted/30 transition-colors">
+                  <td className="px-4 py-3">
+                    <Checkbox
+                      checked={selectedIds.has(p.id)}
+                      onCheckedChange={() => toggleSelect(p.id)}
+                    />
+                  </td>
                   <td className="px-4 py-3">
                     <div>
                       <p className="font-body text-sm font-medium text-foreground">{p.name}</p>
@@ -404,6 +465,24 @@ const Products = () => {
         </DialogContent>
       </Dialog>
       <BulkImageUpload open={bulkImageOpen} onOpenChange={setBulkImageOpen} />
+
+      {/* Bulk Delete Confirmation */}
+      <AlertDialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir {selectedIds.size} produto(s)?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação não pode ser desfeita. Todos os produtos selecionados serão removidos permanentemente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={bulkDeleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmBulkDelete} disabled={bulkDeleting}>
+              {bulkDeleting ? 'Excluindo...' : 'Excluir'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
