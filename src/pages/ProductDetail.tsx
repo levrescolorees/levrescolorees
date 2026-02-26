@@ -17,6 +17,7 @@ const ProductDetail = () => {
   const { addItem } = useCart();
   const [quantity, setQuantity] = useState(1);
   const [selectedColor, setSelectedColor] = useState('');
+  const [selectedImage, setSelectedImage] = useState(0);
 
   const related = useMemo(() =>
     (allProducts ?? []).filter(p => p.id !== product?.id).slice(0, 4),
@@ -86,15 +87,17 @@ const ProductDetail = () => {
           {/* Gallery */}
           <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="space-y-3">
             <div className="aspect-square rounded-sm overflow-hidden bg-secondary">
-              <img src={product.images?.[0] || collectionImg} alt={product.name} className="w-full h-full object-cover" />
+              <img src={product.images?.[selectedImage] || collectionImg} alt={product.name} className="w-full h-full object-cover" />
             </div>
-            <div className="grid grid-cols-4 gap-2">
-              {[1, 2, 3, 4].map(i => (
-                <div key={i} className="aspect-square rounded-sm overflow-hidden bg-secondary border-2 border-transparent hover:border-primary transition-colors cursor-pointer">
-                  <img src={product.images?.[i] || collectionImg} alt={product.name} className="w-full h-full object-cover" />
-                </div>
-              ))}
-            </div>
+            {product.images && product.images.length > 1 && (
+              <div className="grid grid-cols-4 gap-2">
+                {product.images.slice(0, 5).map((img, i) => (
+                  <button key={i} onClick={() => setSelectedImage(i)} className={`aspect-square rounded-sm overflow-hidden bg-secondary border-2 transition-colors cursor-pointer ${selectedImage === i ? 'border-primary' : 'border-transparent hover:border-primary/50'}`}>
+                    <img src={img} alt={product.name} className="w-full h-full object-cover" />
+                  </button>
+                ))}
+              </div>
+            )}
           </motion.div>
 
           {/* Info */}

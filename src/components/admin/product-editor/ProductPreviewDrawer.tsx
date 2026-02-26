@@ -29,6 +29,7 @@ const ProductPreviewDrawer = ({
 }: ProductPreviewDrawerProps) => {
   const [quantity, setQuantity] = useState(1);
   const [selectedColor, setSelectedColor] = useState('');
+  const [selectedImage, setSelectedImage] = useState(0);
 
   const retail = parseFloat(retail_price) || 0;
   const colors = variants.map(v => v.name).filter(Boolean);
@@ -63,9 +64,9 @@ const ProductPreviewDrawer = ({
         <div className="mt-4 space-y-6">
           {/* Gallery */}
           <div className="space-y-2">
-            {mainImage ? (
+            {images.length > 0 ? (
               <div className="aspect-square rounded-lg overflow-hidden bg-secondary">
-                <img src={mainImage} alt={name} className="w-full h-full object-cover" />
+                <img src={images[selectedImage] || images[0]} alt={name} className="w-full h-full object-cover" />
               </div>
             ) : (
               <div className="aspect-square rounded-lg bg-muted flex items-center justify-center">
@@ -74,10 +75,10 @@ const ProductPreviewDrawer = ({
             )}
             {images.length > 1 && (
               <div className="grid grid-cols-4 gap-2">
-                {images.slice(1, 5).map((url, i) => (
-                  <div key={i} className="aspect-square rounded-md overflow-hidden bg-secondary">
+                {images.slice(0, 5).map((url, i) => (
+                  <button key={i} onClick={() => setSelectedImage(i)} className={`aspect-square rounded-md overflow-hidden bg-secondary border-2 transition-colors cursor-pointer ${selectedImage === i ? 'border-primary' : 'border-transparent hover:border-primary/50'}`}>
                     <img src={url} alt="" className="w-full h-full object-cover" />
-                  </div>
+                  </button>
                 ))}
               </div>
             )}
