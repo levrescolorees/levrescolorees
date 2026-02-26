@@ -1,25 +1,62 @@
 
 
-## Ativar busca no header da loja (icone de lupa)
+## Corrigir race condition nos botoes Publicar/Despublicar
 
-O icone de busca (lupa) ao lado do carrinho no header nao faz nada — e apenas um botao sem funcionalidade (linha 66-68 de `Header.tsx`).
+### Problema identificado
 
-### O que sera feito
+Os botoes **Publicar** e **Despublicar** tem um bug critico de race condition. Ambos fazem:
 
-Ao clicar na lupa, abre uma barra de busca inline no header. O usuario digita o nome do produto e ao pressionar Enter (ou apos um debounce), e redirecionado para `/colecoes?search=TERMO` onde os produtos sao filtrados pelo texto digitado.
+```
+setForm(prev => ({ ...prev, status: 'published' }));
+setTimeout(() => saveProduct(false), 50);
+```
 
-### Mudancas
+O `saveProduct` e um `useCallback` que captura o estado `form` no momento da criacao. O `setTimeout` de 50ms captura a referencia ANTIGA do `saveProduct`, que ainda tem o `form` com o status anterior. Resultado: o produto nao muda de status no banco.
 
-**1. `src/components/Header.tsx`**
-- Adicionar estado `searchOpen` e `searchQuery`
-- Ao clicar na lupa, trocar os icones/nav por um input de busca com foco automatico
-- Ao pressionar Enter ou clicar em buscar: navegar para `/colecoes?search=TERMO` usando `useNavigate`
-- Clicar no X ou pressionar Escape fecha a barra de busca
-- No mobile, incluir lupa tambem (atualmente e `hidden md:block`)
+### Plano de correcao
 
-**2. `src/pages/Collections.tsx`**
-- Ler o parametro `search` da URL (`searchParams.get('search')`)
-- Adicionar filtro por nome/descricao no `useMemo` de `filtered`: `p.name.toLowerCase().includes(searchTerm)` ou `p.short_description.toLowerCase().includes(searchTerm)`
-- Mostrar o termo buscado na interface (ex: "Resultados para: batom")
-- Botao para limpar a busca
+**Arquivo: `src/pages/admin/ProductForm.tsx`**
+
+1. Refatorar `saveProduct` para aceitar um parametro opcional `overrides` que sobrepoe campos do form antes de salvar
+2. Remover os `setTimeout` de `handlePublish` e `handleUnpublish`
+3. Chamar `saveProduct` diretamente passando os overrides de status
+
+```typescript
+// saveProduct aceita overrides
+const saveProduct = useCallback(async (redirect = false, overrides?: Partial<FormData>) => {
+  const merged = overrides ? { ...form, ...overrides } : form;
+  // usar merged em vez de form para buildProductData
+  ...
+});
+
+// handlePublish sem setTimeout
+const handlePublish = () => {
+  if (!validate(true)) { ... return; }
+  const overrides = { status: 'published', published_at: new Date().toISOString(), is_active: true };
+  setForm(prev => ({ ...prev, ...overrides }));
+  saveProduct(false, overrides);
+};
+
+// handleUnpublish sem setTimeout
+const handleUnpublish = () => {
+  const overrides = { status: 'draft', is_active: false };
+  setForm(prev => ({ ...prev, ...overrides }));
+  saveProduct(false, overrides);
+};
+```
+
+4. Verificar que `buildProductData` usa os dados merged em vez de ler diretamente do state `form`
+
+### Botoes verificados
+
+| Botao | Status | Acao |
+|---|---|---|
+| Voltar (seta) | OK | Link simples para /admin/produtos |
+| Preview | OK | Abre drawer com dados atuais do form |
+| Duplicar | OK | Funcao independente, nao depende de setTimeout |
+| Publicar | BUG | Race condition com setTimeout - sera corrigido |
+| Despublicar | BUG | Race condition com setTimeout - sera corrigido |
+| Salvar e continuar | OK | Chama saveProduct(false) diretamente |
+| Salvar | OK | Chama saveProduct(true) diretamente |
+| Ctrl+S | OK | Chama saveProduct(false) diretamente |
 
