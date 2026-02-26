@@ -9,6 +9,7 @@ export interface DBProduct {
   short_description: string;
   description: string;
   retail_price: number;
+  cost_price: number;
   images: string[];
   rating: number;
   reviews_count: number;
