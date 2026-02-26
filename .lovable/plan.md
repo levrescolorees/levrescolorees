@@ -1,45 +1,39 @@
 
 
-## Melhorias na importacao em massa de produtos
+## Modelo CSV no formato brasileiro para Excel
 
-### Situacao atual
-A importacao CSV basica ja existe e funciona para campos simples. Porem tem limitacoes significativas para uso profissional.
+### Problema
+O Excel brasileiro usa ponto-e-vírgula (`;`) como separador de colunas (porque a vírgula é o separador decimal no Brasil). O template atual usa vírgula, o que faz o Excel abrir tudo numa coluna só.
 
-### Melhorias propostas
-
-**1. Botao "Baixar Modelo" na pagina de Produtos**
-- Adicionar um botao ao lado do "Importar CSV" que gera e baixa um CSV modelo pre-preenchido com cabecalhos corretos e 2 linhas de exemplo
-- Facilita para o cliente saber exatamente o formato esperado
-
-**2. Campos adicionais no import**
-- Adicionar suporte a: `badge`, `short_description` (descricao curta), `status` (draft/published), `is_active` (sim/nao)
-- Mapear mais variantes de nomes de coluna em portugues
-
-**3. Parser CSV robusto**
-- Tratar campos entre aspas (ex: descricoes com virgula)
-- Usar regex ou parser adequado em vez de `split(',')`
-
-**4. Feedback visual melhorado**
-- Mostrar preview dos dados antes de confirmar a importacao (tabela com as primeiras 5 linhas)
-- Indicar quantas linhas serao importadas e quais foram ignoradas (com motivo)
-
-### Detalhes tecnicos
+### Mudanças
 
 **Arquivo: `src/pages/admin/Products.tsx`**
 
-1. Adicionar funcao `downloadTemplate()` que gera CSV modelo:
+1. **Template (`downloadTemplate`)**: Trocar separador de `,` para `;`, usar vírgula como decimal nos preços (`49,90` em vez de `49.90`), e adicionar BOM UTF-8 (`\uFEFF`) no início para o Excel reconhecer acentos corretamente. Mudar extensão para `.csv` mas com encoding correto.
+
+2. **Parser (`parseCSVLine`)**: Detectar automaticamente se o arquivo usa `;` ou `,` como separador (verificando a primeira linha/header) e parsear de acordo. Isso garante compatibilidade tanto com CSVs brasileiros quanto internacionais.
+
+3. **Parser de preço**: Ao ler o campo de preço, tratar vírgula como decimal (`49,90` → `49.90`) antes de converter para número.
+
+### Detalhes técnicos
+
+**`downloadTemplate()`** — gerar com `;` e BOM:
 ```
-Nome,SKU,Preco,Estoque,Descricao,Descricao Curta,Badge,Status
-Produto Exemplo,SKU-001,49.90,100,Descricao completa,Descricao curta,Mais Vendido,ativo
+\uFEFF
+Nome;SKU;Preco;Estoque;Descricao;Descricao Curta;Badge;Status
+Batom Matte Rosa;SKU-001;49,90;100;Batom de longa duração;Batom matte;Mais Vendido;ativo
+Gloss Labial Nude;SKU-002;39,90;50;Gloss com brilho natural;Gloss nude;;ativo
 ```
 
-2. Melhorar parser CSV para suportar campos entre aspas usando regex split
+**`parseCSVLine()`** — auto-detectar separador:
+- Contar ocorrências de `;` e `,` na linha de headers
+- Usar o que tiver mais ocorrências como separador
+- Passar o separador detectado para todas as linhas
 
-3. Adicionar campos extras ao mapeamento: `badge`, `short_description`, `status`
+**Preço** — normalizar decimal:
+- Substituir `,` por `.` no valor do preço antes do `Number()`
 
-4. Adicionar dialog de preview antes da importacao final com contagem de linhas validas/invalidas
-
-**Mudancas na UI:**
-- Novo botao "Baixar Modelo" (icone Download) ao lado dos botoes existentes
-- Dialog de confirmacao mostrando preview dos dados antes de inserir
+### Impacto
+- O modelo baixado abrirá corretamente no Excel brasileiro com colunas separadas
+- A importação continuará funcionando tanto com CSV brasileiro (`;`) quanto internacional (`,`)
 
