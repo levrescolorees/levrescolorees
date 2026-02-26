@@ -100,6 +100,13 @@ function parseRows(text: string): { valid: ParsedRow[]; skipped: { line: number;
   const seoTitleIdx = findCol(headers, 'seo titulo', 'seo_title');
   const metaDescIdx = findCol(headers, 'meta descricao', 'meta_description');
   const imagesIdx = findCol(headers, 'imagens', 'images', 'fotos');
+  const img1Idx = findCol(headers, 'imagem 1', 'image 1');
+  const img2Idx = findCol(headers, 'imagem 2', 'image 2');
+  const img3Idx = findCol(headers, 'imagem 3', 'image 3');
+  const img4Idx = findCol(headers, 'imagem 4', 'image 4');
+  const img5Idx = findCol(headers, 'imagem 5', 'image 5');
+  const img6Idx = findCol(headers, 'imagem 6', 'image 6');
+  const hasIndividualImgCols = img1Idx !== -1;
   if (nameIdx === -1) return { valid: [], skipped: [{ line: 1, reason: 'Coluna "Nome" não encontrada' }] };
 
   const valid: ParsedRow[] = [];
@@ -127,7 +134,9 @@ function parseRows(text: string): { valid: ParsedRow[]; skipped: { line: number;
       description: descIdx >= 0 ? cols[descIdx] || '' : '',
       short_description: shortDescIdx >= 0 ? cols[shortDescIdx] || '' : '',
       badge: badgeIdx >= 0 ? cols[badgeIdx] || null : null,
-      images: imagesIdx >= 0 ? (cols[imagesIdx] || '').split('|').map(u => u.trim()).filter(Boolean) : [],
+      images: hasIndividualImgCols
+        ? [img1Idx, img2Idx, img3Idx, img4Idx, img5Idx, img6Idx].map(idx => idx >= 0 ? (cols[idx] || '').trim() : '').filter(Boolean)
+        : imagesIdx >= 0 ? (cols[imagesIdx] || '').split('|').map(u => u.trim()).filter(Boolean) : [],
       status: dbStatus,
       is_active: isActiveFromStatus,
       ideal_for_resale: revendaRaw === 'sim' || revendaRaw === 'yes' || revendaRaw === 'true' || revendaRaw === '1',
@@ -144,9 +153,9 @@ function parseRows(text: string): { valid: ParsedRow[]; skipped: { line: number;
 
 function downloadTemplate() {
   const csv = '\uFEFF' + [
-    'Nome;SKU;Preco Custo;Preco Venda;Estoque;Descricao Curta;Descricao;Badge;Status;Revenda;Margem Sugerida;Rating;Reviews;SEO Titulo;Meta Descricao;Imagens',
-    'Batom Matte Rosa;SKU-001;25,00;49,90;100;Batom matte;Batom de longa duracao com acabamento matte;Mais Vendido;ativo;sim;50;4.8;120;Batom Matte Rosa - Levres;Batom matte de longa duracao;https://exemplo.com/foto1.jpg|https://exemplo.com/foto2.jpg',
-    'Gloss Labial Nude;SKU-002;18,00;39,90;50;Gloss nude;Gloss com brilho natural;;ativo;nao;0;0;0;;;',
+    'Nome;SKU;Preco Custo;Preco Venda;Estoque;Descricao Curta;Descricao;Badge;Status;Revenda;Margem Sugerida;Rating;Reviews;SEO Titulo;Meta Descricao;Imagem 1;Imagem 2;Imagem 3;Imagem 4;Imagem 5;Imagem 6',
+    'Batom Matte Rosa;SKU-001;25,00;49,90;100;Batom matte;Batom de longa duracao com acabamento matte;Mais Vendido;ativo;sim;50;4.8;120;Batom Matte Rosa - Levres;Batom matte de longa duracao;https://exemplo.com/foto1.jpg;https://exemplo.com/foto2.jpg;;;;',
+    'Gloss Labial Nude;SKU-002;18,00;39,90;50;Gloss nude;Gloss com brilho natural;;ativo;nao;0;0;0;;;;;;;',
   ].join('\n');
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
@@ -212,16 +221,19 @@ const Products = () => {
 
   const exportCSV = () => {
     if (!filtered.length) return;
-    const headers = ['Nome', 'SKU', 'Preco Custo', 'Preco Venda', 'Estoque', 'Descricao Curta', 'Descricao', 'Badge', 'Status', 'Revenda', 'Margem Sugerida', 'Rating', 'Reviews', 'SEO Titulo', 'Meta Descricao', 'Imagens'];
-    const rows = filtered.map(p => [
-      p.name, p.sku || '', (p as any).cost_price || 0, p.retail_price, p.stock,
-      p.short_description || '', p.description || '', p.badge || '',
-      p.is_active ? 'ativo' : 'inativo',
-      p.ideal_for_resale ? 'sim' : 'nao', p.suggested_margin || 0,
-      p.rating || 0, p.reviews_count || 0,
-      p.seo_title || '', p.meta_description || '',
-      (p.images || []).join('|'),
-    ]);
+    const headers = ['Nome', 'SKU', 'Preco Custo', 'Preco Venda', 'Estoque', 'Descricao Curta', 'Descricao', 'Badge', 'Status', 'Revenda', 'Margem Sugerida', 'Rating', 'Reviews', 'SEO Titulo', 'Meta Descricao', 'Imagem 1', 'Imagem 2', 'Imagem 3', 'Imagem 4', 'Imagem 5', 'Imagem 6'];
+    const rows = filtered.map(p => {
+      const imgs = p.images || [];
+      return [
+        p.name, p.sku || '', (p as any).cost_price || 0, p.retail_price, p.stock,
+        p.short_description || '', p.description || '', p.badge || '',
+        p.is_active ? 'ativo' : 'inativo',
+        p.ideal_for_resale ? 'sim' : 'nao', p.suggested_margin || 0,
+        p.rating || 0, p.reviews_count || 0,
+        p.seo_title || '', p.meta_description || '',
+        imgs[0] || '', imgs[1] || '', imgs[2] || '', imgs[3] || '', imgs[4] || '', imgs[5] || '',
+      ];
+    });
     const csv = '\uFEFF' + [headers, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(';')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
