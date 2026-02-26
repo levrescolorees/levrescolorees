@@ -97,7 +97,11 @@ const ProductForm = () => {
       })));
       setCollectionIds((colProds as any[] || []).map(cp => cp.collection_id));
       setLoading(false);
-    })();
+    })().catch(err => {
+      console.error('Failed to load product:', err);
+      toast.error('Erro ao carregar produto');
+      navigate('/admin/produtos');
+    });
   }, [id, isNew, navigate]);
 
   const updateField = (field: string, value: string | boolean | string[]) => {

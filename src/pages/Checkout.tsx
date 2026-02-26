@@ -95,10 +95,11 @@ const Checkout = () => {
     setForm(prev => ({ ...prev, [field]: value }));
   }, []);
 
-  // ViaCEP
+  // ViaCEP with debounce
   useEffect(() => {
     const raw = form.zip.replace(/\D/g, '');
-    if (raw.length === 8) {
+    if (raw.length !== 8) return;
+    const timer = setTimeout(() => {
       setCepLoading(true);
       fetch(`https://viacep.com.br/ws/${raw}/json/`)
         .then(r => r.json())
@@ -117,7 +118,8 @@ const Checkout = () => {
         })
         .catch(() => toast.error('Erro ao buscar CEP'))
         .finally(() => setCepLoading(false));
-    }
+    }, 500);
+    return () => clearTimeout(timer);
   }, [form.zip]);
 
   // Shipping calculation

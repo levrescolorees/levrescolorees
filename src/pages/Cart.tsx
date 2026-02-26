@@ -39,15 +39,21 @@ const Cart = () => {
                 const smart = getSmartPrice(item.product.retailPrice, item.product.box06Price, item.product.box12Price, item.quantity);
                 const savingPerUnit = item.product.retailPrice - smart.price;
                 return (
-                  <motion.div key={item.product.id} layout className="flex gap-4 p-4 bg-card rounded-sm shadow-soft">
-                    <div className="w-24 h-24 md:w-32 md:h-32 rounded-sm bg-secondary flex-shrink-0" />
+                  <motion.div key={`${item.product.id}-${item.selectedColor}`} layout className="flex gap-4 p-4 bg-card rounded-sm shadow-soft">
+                    <div className="w-24 h-24 md:w-32 md:h-32 rounded-sm bg-secondary flex-shrink-0 overflow-hidden">
+                      {item.product.images?.[0] ? (
+                        <img src={item.product.images[0]} alt={item.product.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full bg-secondary" />
+                      )}
+                    </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex justify-between items-start">
                         <div>
                           <h3 className="font-display text-base font-medium text-foreground">{item.product.name}</h3>
                           <p className="text-xs font-body text-muted-foreground">{item.selectedColor}</p>
                         </div>
-                        <button onClick={() => removeItem(item.product.id)} className="p-1 text-muted-foreground hover:text-destructive">
+                        <button onClick={() => removeItem(item.product.id, item.selectedColor)} className="p-1 text-muted-foreground hover:text-destructive">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
@@ -64,11 +70,11 @@ const Cart = () => {
                         </p>
                       )}
                       <div className="flex items-center gap-2 mt-3">
-                        <button onClick={() => updateQuantity(item.product.id, item.quantity - 1)} className="p-1.5 rounded-sm bg-secondary text-foreground hover:bg-muted">
+                        <button onClick={() => updateQuantity(item.product.id, item.quantity - 1, item.selectedColor)} className="p-1.5 rounded-sm bg-secondary text-foreground hover:bg-muted">
                           <Minus className="w-3.5 h-3.5" />
                         </button>
                         <span className="font-body text-sm font-medium w-8 text-center text-foreground">{item.quantity}</span>
-                        <button onClick={() => updateQuantity(item.product.id, item.quantity + 1)} className="p-1.5 rounded-sm bg-secondary text-foreground hover:bg-muted">
+                        <button onClick={() => updateQuantity(item.product.id, item.quantity + 1, item.selectedColor)} className="p-1.5 rounded-sm bg-secondary text-foreground hover:bg-muted">
                           <Plus className="w-3.5 h-3.5" />
                         </button>
                         <span className="ml-auto font-body font-semibold text-foreground">{formatCurrency(smart.price * item.quantity)}</span>
