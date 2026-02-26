@@ -21,7 +21,7 @@ const HeroBanner = () => {
     <section className="relative min-h-[85vh] md:min-h-[90vh] flex items-center overflow-hidden">
       {/* Background */}
       <div className="absolute inset-0">
-        <img src={heroBanner} alt="Lèvres Colorées - Lip products premium" className="w-full h-full object-cover" fetchPriority="high" decoding="async" />
+        <img src={heroBanner} alt="Levres Colorees - Lip products premium" className="w-full h-full object-cover" fetchPriority="high" decoding="async" />
         <div className="absolute inset-0 bg-gradient-to-r from-foreground/70 via-foreground/40 to-transparent" />
       </div>
 
