@@ -1,57 +1,55 @@
 
 
-## Imagens na importação em massa
+## Planilha completa com Preço de Custo e todos os campos do produto
 
-### Situação atual
-O modelo CSV atual não inclui coluna de imagens. A tabela `products` tem um campo `images` (array de URLs de texto), então as imagens precisam já estar hospedadas em algum lugar (URL pública) para serem referenciadas.
+### Problema
+A planilha modelo atual nao tem campo de preco de custo — so tem preco de venda (retail_price). Alem disso, faltam outros campos uteis como rating, reviews, margem sugerida, ideal para revenda, SEO title e meta description.
 
-### Opções de abordagem
+### Mudancas necessarias
 
-Existem duas formas viáveis:
+**1. Adicionar coluna `cost_price` na tabela `products` (migracao SQL)**
+A tabela `products` atualmente nao tem campo de preco de custo. Precisamos adicionar:
+```sql
+ALTER TABLE products ADD COLUMN cost_price numeric NOT NULL DEFAULT 0;
+```
 
-**Opção A — Coluna "Imagens" no CSV com URLs**
-- Adicionar coluna `Imagens` ao modelo CSV
-- O cliente coloca URLs públicas das imagens (separadas por `|` quando múltiplas)
-- Exemplo: `https://exemplo.com/foto1.jpg|https://exemplo.com/foto2.jpg`
-- Simples de implementar, mas exige que as imagens já estejam hospedadas em algum lugar
+**2. Atualizar o template CSV para incluir todos os campos**
+Nova estrutura completa da planilha:
+```text
+Nome;SKU;Preco Custo;Preco Venda;Estoque;Descricao Curta;Descricao;Badge;Status;Revenda;Margem Sugerida;Rating;Reviews;SEO Titulo;Meta Descricao;Imagens
+```
 
-**Opção B — Upload em lote de imagens + associação por SKU (recomendada)**
-- Adicionar uma seção de "Upload de Imagens em Lote" na página de Produtos
-- O cliente arrasta/solta múltiplas imagens de uma vez
-- As imagens são enviadas ao bucket `product-images` do Supabase Storage
-- Nomeação por convenção: o nome do arquivo deve conter o SKU (ex: `SKU-001-frente.jpg`, `SKU-001-verso.jpg`)
-- Após o upload, o sistema associa automaticamente as imagens aos produtos pelo SKU
-- Pode funcionar junto com o CSV: primeiro importa o CSV, depois faz upload das imagens em lote
+**3. Atualizar o parser CSV**
+Adicionar mapeamento para os novos campos:
+- `Preco Custo` / `cost_price` / `custo` → `cost_price`
+- `Revenda` / `ideal_for_resale` → boolean (sim/nao)
+- `Margem Sugerida` / `suggested_margin` → numero
+- `Rating` → numero
+- `Reviews` → numero
+- `SEO Titulo` / `seo_title` → texto
+- `Meta Descricao` / `meta_description` → texto
 
-### Plano de implementação (Opção B — upload em lote)
+**4. Atualizar o ProductForm e PricingCard**
+Incluir o campo `cost_price` no formulario de edicao individual do produto, ao lado do preco de venda.
 
-**Arquivo: `src/pages/admin/Products.tsx`**
+**5. Atualizar a exportacao CSV**
+Incluir os novos campos na exportacao tambem.
 
-1. Adicionar coluna `Imagens` ao template CSV para quem quiser usar URLs diretas (separadas por `|`)
-2. No parser, mapear a coluna `imagens`/`images` e fazer split por `|` para preencher o array `images` do produto
+### Arquivos afetados
 
-**Arquivo: `src/pages/admin/Products.tsx` (novo componente inline ou separado)**
+| Arquivo | Mudanca |
+|---------|---------|
+| Migracao SQL | `ALTER TABLE products ADD COLUMN cost_price` |
+| `src/pages/admin/Products.tsx` | Template, parser, preview, exportacao |
+| `src/components/admin/product-editor/PricingCard.tsx` | Campo cost_price no formulario |
+| `src/pages/admin/ProductForm.tsx` | FormData + buildProductData com cost_price |
+| `src/hooks/useProducts.ts` | Tipo DBProduct com cost_price (se necessario) |
 
-3. Adicionar botao "Upload Imagens em Lote" que abre um Dialog
-4. Área de drag-and-drop para múltiplos arquivos de imagem
-5. Listar os arquivos selecionados com preview de thumbnail
-6. Ao confirmar, fazer upload de cada arquivo para `product-images` bucket
-7. Extrair o SKU do nome do arquivo (parte antes do primeiro `-` ou `_` após o padrão SKU)
-8. Buscar o produto com aquele SKU e adicionar a URL pública ao array `images`
+### Template modelo (exemplo de como fica no Excel)
 
-### Mudancas tecnicas
-
-- **Template CSV**: Nova coluna `Imagens` com exemplo `https://exemplo.com/foto.jpg`
-- **Parser**: `findCol(headers, 'imagens', 'images', 'fotos')` → split por `|` → array de strings
-- **Upload em lote**: Novo Dialog com input `multiple` accept `image/*`, upload ao Supabase Storage, match por SKU, update na tabela `products`
-- **Convenção de nome**: `{SKU}-{qualquer-coisa}.jpg` → associa ao produto com aquele SKU
-
-### Fluxo do cliente
-
-1. Baixa o modelo CSV
-2. Preenche os produtos (pode deixar coluna Imagens vazia)
-3. Importa o CSV
-4. Clica em "Upload Imagens em Lote"
-5. Arrasta as fotos nomeadas com o SKU
-6. Sistema associa automaticamente
+```text
+Nome;SKU;Preco Custo;Preco Venda;Estoque;Descricao Curta;Descricao;Badge;Status;Revenda;Margem Sugerida;Rating;Reviews;SEO Titulo;Meta Descricao;Imagens
+Batom Matte Rosa;SKU-001;25,00;49,90;100;Batom matte;Batom de longa duracao com acabamento matte;Mais Vendido;ativo;sim;50;4.8;120;Batom Matte Rosa - Levres;Batom matte de longa duracao;https://exemplo.com/foto1.jpg|https://exemplo.com/foto2.jpg
+Gloss Labial Nude;SKU-002;18,00;39,90;50;Gloss nude;Gloss com brilho natural;;ativo;nao;0;0;0;;;
+```
 
