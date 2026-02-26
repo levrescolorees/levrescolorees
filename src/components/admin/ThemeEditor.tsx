@@ -362,7 +362,7 @@ const ThemeEditor = ({ onDraftChange }: ThemeEditorProps) => {
               value={draft.components.images?.logo || ''}
               onChange={url => updateImage('logo', url)}
               folder="logo"
-              aspect={4}
+              aspect={undefined}
             />
             <ImageUploadRow
               label="Hero Banner"
