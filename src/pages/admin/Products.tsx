@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Search, ToggleLeft, ToggleRight, Pencil, Trash2, Download, Upload, FileDown } from 'lucide-react';
+import { Plus, Search, ToggleLeft, ToggleRight, Pencil, Trash2, Download, Upload, FileDown, Image } from 'lucide-react';
 import { useAdminProducts, useDeleteProduct, useToggleProduct, formatCurrency } from '@/hooks/useProducts';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
@@ -15,6 +15,7 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog';
+import BulkImageUpload from '@/components/admin/BulkImageUpload';
 
 /* ── CSV helpers ── */
 
@@ -65,6 +66,7 @@ type ParsedRow = {
   badge: string | null;
   status: string;
   is_active: boolean;
+  images: string[];
 };
 
 function parseRows(text: string): { valid: ParsedRow[]; skipped: { line: number; reason: string }[] } {
@@ -82,7 +84,7 @@ function parseRows(text: string): { valid: ParsedRow[]; skipped: { line: number;
   const shortDescIdx = findCol(headers, 'descricao curta', 'short_description', 'descricao_curta');
   const badgeIdx = findCol(headers, 'badge', 'selo');
   const statusIdx = findCol(headers, 'status');
-
+  const imagesIdx = findCol(headers, 'imagens', 'images', 'fotos');
   if (nameIdx === -1) return { valid: [], skipped: [{ line: 1, reason: 'Coluna "Nome" não encontrada' }] };
 
   const valid: ParsedRow[] = [];
@@ -107,6 +109,7 @@ function parseRows(text: string): { valid: ParsedRow[]; skipped: { line: number;
       description: descIdx >= 0 ? cols[descIdx] || '' : '',
       short_description: shortDescIdx >= 0 ? cols[shortDescIdx] || '' : '',
       badge: badgeIdx >= 0 ? cols[badgeIdx] || null : null,
+      images: imagesIdx >= 0 ? (cols[imagesIdx] || '').split('|').map(u => u.trim()).filter(Boolean) : [],
       status: dbStatus,
       is_active: isActiveFromStatus,
     });
@@ -117,9 +120,9 @@ function parseRows(text: string): { valid: ParsedRow[]; skipped: { line: number;
 
 function downloadTemplate() {
   const csv = '\uFEFF' + [
-    'Nome;SKU;Preco;Estoque;Descricao;Descricao Curta;Badge;Status',
-    'Batom Matte Rosa;SKU-001;49,90;100;Batom de longa duração com acabamento matte;Batom matte;Mais Vendido;ativo',
-    'Gloss Labial Nude;SKU-002;39,90;50;Gloss com brilho natural;Gloss nude;;ativo',
+    'Nome;SKU;Preco;Estoque;Descricao;Descricao Curta;Badge;Status;Imagens',
+    'Batom Matte Rosa;SKU-001;49,90;100;Batom de longa duração com acabamento matte;Batom matte;Mais Vendido;ativo;https://exemplo.com/foto1.jpg|https://exemplo.com/foto2.jpg',
+    'Gloss Labial Nude;SKU-002;39,90;50;Gloss com brilho natural;Gloss nude;;ativo;',
   ].join('\n');
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
@@ -137,6 +140,7 @@ const Products = () => {
   const [search, setSearch] = useState('');
   const [importing, setImporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [bulkImageOpen, setBulkImageOpen] = useState(false);
 
   // Preview state
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -207,6 +211,9 @@ const Products = () => {
           </Button>
           <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={importing}>
             <Upload className="w-4 h-4 mr-2" /> {importing ? 'Importando...' : 'Importar CSV'}
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setBulkImageOpen(true)}>
+            <Image className="w-4 h-4 mr-2" /> Upload Imagens
           </Button>
           <Button variant="outline" size="sm" onClick={exportCSV}><Download className="w-4 h-4 mr-2" /> Exportar</Button>
           <Button size="sm" asChild>
@@ -365,6 +372,7 @@ const Products = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <BulkImageUpload open={bulkImageOpen} onOpenChange={setBulkImageOpen} />
     </div>
   );
 };
