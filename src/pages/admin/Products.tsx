@@ -435,6 +435,26 @@ const Products = () => {
       {selectedIds.size > 0 && (
         <div className="flex items-center gap-3 bg-muted/80 border border-border rounded-lg px-4 py-2">
           <span className="font-body text-sm text-foreground font-medium">{selectedIds.size} produto(s) selecionado(s)</span>
+          <Button variant="outline" size="sm" onClick={async () => {
+            const ids = Array.from(selectedIds);
+            const { error } = await supabase.from('products').update({ is_active: true }).in('id', ids);
+            if (error) { toast.error('Erro ao ativar produtos'); return; }
+            qc.invalidateQueries({ queryKey: ['admin', 'products'] });
+            toast.success(`${ids.length} produto(s) ativado(s)!`);
+            setSelectedIds(new Set());
+          }}>
+            <ToggleRight className="w-4 h-4 mr-2" /> Ativar
+          </Button>
+          <Button variant="outline" size="sm" onClick={async () => {
+            const ids = Array.from(selectedIds);
+            const { error } = await supabase.from('products').update({ is_active: false }).in('id', ids);
+            if (error) { toast.error('Erro ao desativar produtos'); return; }
+            qc.invalidateQueries({ queryKey: ['admin', 'products'] });
+            toast.success(`${ids.length} produto(s) desativado(s)!`);
+            setSelectedIds(new Set());
+          }}>
+            <ToggleLeft className="w-4 h-4 mr-2" /> Desativar
+          </Button>
           <Button variant="outline" size="sm" onClick={() => setBulkCollectionOpen(true)}>
             <FolderPlus className="w-4 h-4 mr-2" /> Adicionar a coleção
           </Button>
