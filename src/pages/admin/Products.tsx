@@ -18,7 +18,13 @@ import {
 
 /* ── CSV helpers ── */
 
-function parseCSVLine(line: string): string[] {
+function detectSeparator(headerLine: string): string {
+  const semicolons = (headerLine.match(/;/g) || []).length;
+  const commas = (headerLine.match(/,/g) || []).length;
+  return semicolons >= commas ? ';' : ',';
+}
+
+function parseCSVLine(line: string, sep: string): string[] {
   const result: string[] = [];
   let current = '';
   let inQuotes = false;
@@ -30,12 +36,18 @@ function parseCSVLine(line: string): string[] {
       else { current += ch; }
     } else {
       if (ch === '"') { inQuotes = true; }
-      else if (ch === ',') { result.push(current.trim()); current = ''; }
+      else if (ch === sep) { result.push(current.trim()); current = ''; }
       else { current += ch; }
     }
   }
   result.push(current.trim());
   return result;
+}
+
+function parsePrice(val: string): number {
+  // Handle Brazilian format: "49,90" → 49.90
+  const normalized = val.replace(/\./g, '').replace(',', '.');
+  return Number(normalized) || 0;
 }
 
 function findCol(headers: string[], ...aliases: string[]) {
@@ -59,7 +71,8 @@ function parseRows(text: string): { valid: ParsedRow[]; skipped: { line: number;
   const lines = text.split(/\r?\n/).filter(l => l.trim());
   if (lines.length < 2) return { valid: [], skipped: [] };
 
-  const headers = parseCSVLine(lines[0]).map(h => h.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
+  const sep = detectSeparator(lines[0]);
+  const headers = parseCSVLine(lines[0], sep).map(h => h.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
 
   const nameIdx = findCol(headers, 'nome', 'name');
   const skuIdx = findCol(headers, 'sku');
@@ -76,7 +89,7 @@ function parseRows(text: string): { valid: ParsedRow[]; skipped: { line: number;
   const skipped: { line: number; reason: string }[] = [];
 
   lines.slice(1).forEach((line, i) => {
-    const cols = parseCSVLine(line);
+    const cols = parseCSVLine(line, sep);
     const name = cols[nameIdx] || '';
     if (!name) { skipped.push({ line: i + 2, reason: 'Nome vazio' }); return; }
     const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') + '-' + Date.now().toString(36);
@@ -89,7 +102,7 @@ function parseRows(text: string): { valid: ParsedRow[]; skipped: { line: number;
       name,
       slug,
       sku: skuIdx >= 0 ? cols[skuIdx] || null : null,
-      retail_price: priceIdx >= 0 ? Number(cols[priceIdx]) || 0 : 0,
+      retail_price: priceIdx >= 0 ? parsePrice(cols[priceIdx] || '0') : 0,
       stock: stockIdx >= 0 ? Number(cols[stockIdx]) || 0 : 0,
       description: descIdx >= 0 ? cols[descIdx] || '' : '',
       short_description: shortDescIdx >= 0 ? cols[shortDescIdx] || '' : '',
@@ -103,12 +116,12 @@ function parseRows(text: string): { valid: ParsedRow[]; skipped: { line: number;
 }
 
 function downloadTemplate() {
-  const csv = [
-    'Nome,SKU,Preco,Estoque,Descricao,Descricao Curta,Badge,Status',
-    '"Batom Matte Rosa",SKU-001,49.90,100,"Batom de longa duração com acabamento matte","Batom matte","Mais Vendido",ativo',
-    '"Gloss Labial Nude",SKU-002,39.90,50,"Gloss com brilho natural","Gloss nude",,ativo',
+  const csv = '\uFEFF' + [
+    'Nome;SKU;Preco;Estoque;Descricao;Descricao Curta;Badge;Status',
+    'Batom Matte Rosa;SKU-001;49,90;100;Batom de longa duração com acabamento matte;Batom matte;Mais Vendido;ativo',
+    'Gloss Labial Nude;SKU-002;39,90;50;Gloss com brilho natural;Gloss nude;;ativo',
   ].join('\n');
-  const blob = new Blob([csv], { type: 'text/csv' });
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a'); a.href = url; a.download = 'modelo-produtos.csv'; a.click();
   URL.revokeObjectURL(url);
