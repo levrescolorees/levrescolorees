@@ -10,8 +10,8 @@ export interface CartItem {
 interface CartContextType {
   items: CartItem[];
   addItem: (product: Product, quantity: number, color: string) => void;
-  removeItem: (productId: string) => void;
-  updateQuantity: (productId: string, quantity: number) => void;
+  removeItem: (productId: string, color?: string) => void;
+  updateQuantity: (productId: string, quantity: number, color?: string) => void;
   clearCart: () => void;
   totalItems: number;
   totalRetail: number;
@@ -42,15 +42,17 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     setIsCartOpen(true);
   }, []);
 
-  const removeItem = useCallback((productId: string) => {
-    setItems(prev => prev.filter(i => i.product.id !== productId));
+  const removeItem = useCallback((productId: string, color?: string) => {
+    setItems(prev => prev.filter(i => !(i.product.id === productId && (color == null || i.selectedColor === color))));
   }, []);
 
-  const updateQuantity = useCallback((productId: string, quantity: number) => {
+  const updateQuantity = useCallback((productId: string, quantity: number, color?: string) => {
     if (quantity <= 0) {
-      setItems(prev => prev.filter(i => i.product.id !== productId));
+      setItems(prev => prev.filter(i => !(i.product.id === productId && (color == null || i.selectedColor === color))));
     } else {
-      setItems(prev => prev.map(i => i.product.id === productId ? { ...i, quantity } : i));
+      setItems(prev => prev.map(i =>
+        (i.product.id === productId && (color == null || i.selectedColor === color)) ? { ...i, quantity } : i
+      ));
     }
   }, []);
 

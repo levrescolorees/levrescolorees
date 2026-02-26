@@ -191,11 +191,13 @@ const Products = () => {
   const filtered = (products ?? []).filter(p => {
     const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase()) ||
       p.sku?.toLowerCase().includes(search.toLowerCase());
-    const matchesCollection = filterCollectionId === 'all' ||
-      filterCollectionId === 'none'
-        ? !(p as any).collections?.length
-        : ((p as any).collections as any[])?.some((c: any) => c.id === filterCollectionId);
-    return matchesSearch && (filterCollectionId === 'all' || matchesCollection);
+    const matchesCollection =
+      filterCollectionId === 'all'
+        ? true
+        : filterCollectionId === 'none'
+          ? !(p as any).collections?.length
+          : ((p as any).collections as any[])?.some((c: any) => c.id === filterCollectionId);
+    return matchesSearch && matchesCollection;
   });
 
   // Clear selection when search changes

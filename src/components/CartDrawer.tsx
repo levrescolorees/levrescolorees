@@ -84,7 +84,11 @@ const CartDrawer = () => {
                       className="flex gap-4 p-3 bg-card rounded-sm"
                     >
                       <div className="w-20 h-20 rounded-sm bg-secondary flex-shrink-0 overflow-hidden">
-                        <div className="w-full h-full bg-secondary" />
+                        {item.product.images?.[0] ? (
+                          <img src={item.product.images[0]} alt={item.product.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full bg-secondary" />
+                        )}
                       </div>
                       <div className="flex-1 min-w-0">
                         <h3 className="font-display text-sm font-medium text-foreground truncate">{item.product.name}</h3>
@@ -96,14 +100,14 @@ const CartDrawer = () => {
                           )}
                         </div>
                         <div className="flex items-center gap-2 mt-2">
-                          <button onClick={() => updateQuantity(item.product.id, item.quantity - 1)} className="p-1 rounded-sm bg-secondary text-foreground hover:bg-muted">
+                          <button onClick={() => updateQuantity(item.product.id, item.quantity - 1, item.selectedColor)} className="p-1 rounded-sm bg-secondary text-foreground hover:bg-muted">
                             <Minus className="w-3 h-3" />
                           </button>
                           <span className="font-body text-sm font-medium w-6 text-center text-foreground">{item.quantity}</span>
-                          <button onClick={() => updateQuantity(item.product.id, item.quantity + 1)} className="p-1 rounded-sm bg-secondary text-foreground hover:bg-muted">
+                          <button onClick={() => updateQuantity(item.product.id, item.quantity + 1, item.selectedColor)} className="p-1 rounded-sm bg-secondary text-foreground hover:bg-muted">
                             <Plus className="w-3 h-3" />
                           </button>
-                          <button onClick={() => removeItem(item.product.id)} className="ml-auto p-1 text-muted-foreground hover:text-destructive">
+                          <button onClick={() => removeItem(item.product.id, item.selectedColor)} className="ml-auto p-1 text-muted-foreground hover:text-destructive">
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
