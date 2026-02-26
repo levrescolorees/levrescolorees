@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Search, ToggleLeft, ToggleRight, Pencil, Trash2, Download, Upload, FileDown, Image, X } from 'lucide-react';
+import { Plus, Search, ToggleLeft, ToggleRight, Pencil, Trash2, Download, Upload, FileDown, Image, X, RefreshCw } from 'lucide-react';
 import { useAdminProducts, useDeleteProduct, useToggleProduct, formatCurrency } from '@/hooks/useProducts';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
@@ -181,6 +181,7 @@ const Products = () => {
   // Preview state
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewData, setPreviewData] = useState<{ valid: ParsedRow[]; skipped: { line: number; reason: string }[] }>({ valid: [], skipped: [] });
+  const [existingSkuMap, setExistingSkuMap] = useState<Map<string, string>>(new Map()); // sku -> id
 
   const filtered = products?.filter(p =>
     p.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -254,6 +255,23 @@ const Products = () => {
         toast.error('Nenhum produto válido encontrado. Verifique se a coluna "Nome" existe.');
         return;
       }
+
+      // Fetch existing SKUs to detect updates
+      const skusFromCsv = result.valid.map(r => r.sku).filter((s): s is string => !!s);
+      const skuMap = new Map<string, string>();
+      if (skusFromCsv.length > 0) {
+        const { data: existing } = await supabase
+          .from('products')
+          .select('id, sku')
+          .in('sku', skusFromCsv);
+        if (existing) {
+          for (const p of existing) {
+            if (p.sku) skuMap.set(p.sku, p.id);
+          }
+        }
+      }
+      setExistingSkuMap(skuMap);
+
       setPreviewData(result);
       setPreviewOpen(true);
     } catch {
@@ -266,30 +284,59 @@ const Products = () => {
   const confirmImport = async () => {
     setImporting(true);
     setPreviewOpen(false);
-    let successCount = 0;
+    let insertedCount = 0;
+    let updatedCount = 0;
     let failCount = 0;
     try {
-      // Insert in batches of 20 to avoid payload limits and get better error handling
-      const batch = 20;
-      for (let i = 0; i < previewData.valid.length; i += batch) {
-        const chunk = previewData.valid.slice(i, i + batch);
-        const { error } = await supabase.from('products').insert(chunk as any[]);
-        if (error) {
-          console.error('Import batch error:', error);
-          failCount += chunk.length;
+      const toInsert: ParsedRow[] = [];
+      const toUpdate: { id: string; data: Omit<ParsedRow, 'slug'> }[] = [];
+
+      for (const row of previewData.valid) {
+        if (row.sku && existingSkuMap.has(row.sku)) {
+          const { slug, ...rest } = row;
+          toUpdate.push({ id: existingSkuMap.get(row.sku)!, data: rest });
         } else {
-          successCount += chunk.length;
+          toInsert.push(row);
         }
       }
+
+      // Process updates
+      for (const item of toUpdate) {
+        const { error } = await supabase.from('products').update(item.data as any).eq('id', item.id);
+        if (error) {
+          console.error('Update error:', error);
+          failCount++;
+        } else {
+          updatedCount++;
+        }
+      }
+
+      // Process inserts in batches
+      const batch = 20;
+      for (let i = 0; i < toInsert.length; i += batch) {
+        const chunk = toInsert.slice(i, i + batch);
+        const { error } = await supabase.from('products').insert(chunk as any[]);
+        if (error) {
+          console.error('Insert batch error:', error);
+          failCount += chunk.length;
+        } else {
+          insertedCount += chunk.length;
+        }
+      }
+
       qc.invalidateQueries({ queryKey: ['admin', 'products'] });
-      if (successCount > 0) toast.success(`${successCount} produto(s) importado(s)!`);
-      if (failCount > 0) toast.error(`${failCount} produto(s) falharam. Verifique se não há SKUs duplicados.`);
+      const parts: string[] = [];
+      if (insertedCount > 0) parts.push(`${insertedCount} importado(s)`);
+      if (updatedCount > 0) parts.push(`${updatedCount} atualizado(s)`);
+      if (parts.length > 0) toast.success(parts.join(', ') + '!');
+      if (failCount > 0) toast.error(`${failCount} produto(s) falharam.`);
     } catch (err: any) {
       console.error('Import error:', err);
       toast.error('Erro na importação: ' + (err.message || 'Tente novamente.'));
     } finally {
       setImporting(false);
       setPreviewData({ valid: [], skipped: [] });
+      setExistingSkuMap(new Map());
     }
   };
 
@@ -438,7 +485,14 @@ const Products = () => {
           <DialogHeader>
             <DialogTitle>Confirmar importação</DialogTitle>
             <DialogDescription>
-              {previewData.valid.length} produto(s) válido(s) encontrado(s).
+              {(() => {
+                const newCount = previewData.valid.filter(r => !r.sku || !existingSkuMap.has(r.sku)).length;
+                const updateCount = previewData.valid.filter(r => r.sku && existingSkuMap.has(r.sku)).length;
+                const parts: string[] = [];
+                if (newCount > 0) parts.push(`${newCount} novo(s)`);
+                if (updateCount > 0) parts.push(`${updateCount} atualização(ões)`);
+                return parts.join(', ') + '.';
+              })()}
               {previewData.skipped.length > 0 && ` ${previewData.skipped.length} linha(s) ignorada(s).`}
             </DialogDescription>
           </DialogHeader>
@@ -452,20 +506,33 @@ const Products = () => {
                   <th className="text-left px-3 py-2 font-body text-xs text-muted-foreground">Custo</th>
                   <th className="text-left px-3 py-2 font-body text-xs text-muted-foreground">Venda</th>
                   <th className="text-left px-3 py-2 font-body text-xs text-muted-foreground">Estoque</th>
-                  <th className="text-left px-3 py-2 font-body text-xs text-muted-foreground">Status</th>
+                  <th className="text-left px-3 py-2 font-body text-xs text-muted-foreground">Ação</th>
                 </tr>
               </thead>
               <tbody>
-                {previewData.valid.slice(0, 5).map((row, i) => (
-                  <tr key={i} className="border-b border-border">
-                    <td className="px-3 py-2 font-body text-foreground">{row.name}</td>
-                    <td className="px-3 py-2 font-body text-muted-foreground">{row.sku || '—'}</td>
-                    <td className="px-3 py-2 font-body text-foreground">R$ {row.cost_price.toFixed(2)}</td>
-                    <td className="px-3 py-2 font-body text-foreground">R$ {row.retail_price.toFixed(2)}</td>
-                    <td className="px-3 py-2 font-body text-foreground">{row.stock}</td>
-                    <td className="px-3 py-2 font-body text-muted-foreground">{row.status}</td>
-                  </tr>
-                ))}
+                {previewData.valid.slice(0, 5).map((row, i) => {
+                  const isUpdate = !!(row.sku && existingSkuMap.has(row.sku));
+                  return (
+                    <tr key={i} className="border-b border-border">
+                      <td className="px-3 py-2 font-body text-foreground">{row.name}</td>
+                      <td className="px-3 py-2 font-body text-muted-foreground">{row.sku || '—'}</td>
+                      <td className="px-3 py-2 font-body text-foreground">R$ {row.cost_price.toFixed(2)}</td>
+                      <td className="px-3 py-2 font-body text-foreground">R$ {row.retail_price.toFixed(2)}</td>
+                      <td className="px-3 py-2 font-body text-foreground">{row.stock}</td>
+                      <td className="px-3 py-2">
+                        {isUpdate ? (
+                          <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-600 bg-amber-100 rounded-full px-2 py-0.5">
+                            <RefreshCw className="w-3 h-3" /> Atualizar
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-100 rounded-full px-2 py-0.5">
+                            <Plus className="w-3 h-3" /> Novo
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
             {previewData.valid.length > 5 && (
@@ -485,7 +552,7 @@ const Products = () => {
           <DialogFooter>
             <Button variant="outline" onClick={() => setPreviewOpen(false)}>Cancelar</Button>
             <Button onClick={confirmImport} disabled={importing}>
-              {importing ? 'Importando...' : `Importar ${previewData.valid.length} produto(s)`}
+              {importing ? 'Importando...' : `Confirmar ${previewData.valid.length} produto(s)`}
             </Button>
           </DialogFooter>
         </DialogContent>
