@@ -42,7 +42,7 @@ const AdminLogin = () => {
       >
         <div className="bg-card rounded-lg shadow-soft p-8 space-y-6">
           <div className="text-center">
-            <h1 className="font-display text-2xl font-bold text-foreground">Lèvres Colorées</h1>
+            <h1 className="font-display text-2xl font-bold text-foreground">Levres Colorees</h1>
             <p className="font-body text-sm text-muted-foreground mt-1">Painel Administrativo</p>
           </div>
 

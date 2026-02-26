@@ -4,7 +4,7 @@ import { useStoreSettings } from '@/hooks/useStoreSettings';
 
 const Footer = () => {
   const { data: settings } = useStoreSettings();
-  const brandName = settings?.brand?.name || 'Lèvres Colorées';
+  const brandName = settings?.brand?.name || 'Levres Colorees';
   const tagline = settings?.brand?.tagline || 'Cores que expressam. Qualidade que conquista. Do varejo ao atacado.';
 
   return (

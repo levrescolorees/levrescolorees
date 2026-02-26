@@ -29,7 +29,7 @@ export function AdminSidebar() {
   return (
     <Sidebar className="border-r border-sidebar-border">
       <div className="px-4 py-4 border-b border-sidebar-border">
-        <h2 className="font-display text-lg font-bold text-sidebar-foreground">Lèvres Colorées</h2>
+        <h2 className="font-display text-lg font-bold text-sidebar-foreground">Levres Colorees</h2>
         <p className="text-xs font-body text-muted-foreground">Admin</p>
       </div>
       <SidebarContent>

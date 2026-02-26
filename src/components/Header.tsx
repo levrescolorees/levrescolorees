@@ -35,7 +35,7 @@ const Header = () => {
     setSearchQuery('');
   };
 
-  const brandName = settings?.brand?.name || 'Lèvres Colorées';
+  const brandName = settings?.brand?.name || 'Levres Colorees';
   const logoUrl = activeTheme?.components?.images?.logo || '';
   const topBarVisible = activeTheme?.components?.topBar?.visible ?? true;
   const topBarText = activeTheme?.components?.topBar?.text || 'FRETE GRÁTIS acima de R$299 • Compre no Atacado e economize até 40%';
