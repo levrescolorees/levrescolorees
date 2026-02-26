@@ -5,7 +5,7 @@ export type AutosaveStatus = 'idle' | 'saving' | 'saved' | 'unsaved';
 interface UseAutosaveOptions {
   data: any;
   onSave: () => Promise<void>;
-  enabled: boolean; // only after first manual save (has ID)
+  enabled: boolean;
   debounceMs?: number;
 }
 
@@ -14,6 +14,12 @@ export function useAutosave({ data, onSave, enabled, debounceMs = 1500 }: UseAut
   const lastSavedRef = useRef<string>('');
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isMountedRef = useRef(true);
+  const onSaveRef = useRef(onSave);
+
+  // Keep onSave ref stable to avoid re-triggering the effect
+  useEffect(() => {
+    onSaveRef.current = onSave;
+  }, [onSave]);
 
   const currentJson = JSON.stringify(data);
 
@@ -29,7 +35,6 @@ export function useAutosave({ data, onSave, enabled, debounceMs = 1500 }: UseAut
   useEffect(() => {
     if (!enabled) return;
     if (lastSavedRef.current === '') {
-      // First snapshot after enabling
       lastSavedRef.current = currentJson;
       return;
     }
@@ -44,7 +49,7 @@ export function useAutosave({ data, onSave, enabled, debounceMs = 1500 }: UseAut
       if (!isMountedRef.current) return;
       setStatus('saving');
       try {
-        await onSave();
+        await onSaveRef.current();
         if (isMountedRef.current) {
           lastSavedRef.current = JSON.stringify(data);
           setStatus('saved');
@@ -57,7 +62,7 @@ export function useAutosave({ data, onSave, enabled, debounceMs = 1500 }: UseAut
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [currentJson, enabled, debounceMs, onSave, data]);
+  }, [currentJson, enabled, debounceMs, data]);
 
   // beforeunload
   useEffect(() => {
