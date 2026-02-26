@@ -1,39 +1,57 @@
 
 
-## Modelo CSV no formato brasileiro para Excel
+## Imagens na importação em massa
 
-### Problema
-O Excel brasileiro usa ponto-e-vírgula (`;`) como separador de colunas (porque a vírgula é o separador decimal no Brasil). O template atual usa vírgula, o que faz o Excel abrir tudo numa coluna só.
+### Situação atual
+O modelo CSV atual não inclui coluna de imagens. A tabela `products` tem um campo `images` (array de URLs de texto), então as imagens precisam já estar hospedadas em algum lugar (URL pública) para serem referenciadas.
 
-### Mudanças
+### Opções de abordagem
+
+Existem duas formas viáveis:
+
+**Opção A — Coluna "Imagens" no CSV com URLs**
+- Adicionar coluna `Imagens` ao modelo CSV
+- O cliente coloca URLs públicas das imagens (separadas por `|` quando múltiplas)
+- Exemplo: `https://exemplo.com/foto1.jpg|https://exemplo.com/foto2.jpg`
+- Simples de implementar, mas exige que as imagens já estejam hospedadas em algum lugar
+
+**Opção B — Upload em lote de imagens + associação por SKU (recomendada)**
+- Adicionar uma seção de "Upload de Imagens em Lote" na página de Produtos
+- O cliente arrasta/solta múltiplas imagens de uma vez
+- As imagens são enviadas ao bucket `product-images` do Supabase Storage
+- Nomeação por convenção: o nome do arquivo deve conter o SKU (ex: `SKU-001-frente.jpg`, `SKU-001-verso.jpg`)
+- Após o upload, o sistema associa automaticamente as imagens aos produtos pelo SKU
+- Pode funcionar junto com o CSV: primeiro importa o CSV, depois faz upload das imagens em lote
+
+### Plano de implementação (Opção B — upload em lote)
 
 **Arquivo: `src/pages/admin/Products.tsx`**
 
-1. **Template (`downloadTemplate`)**: Trocar separador de `,` para `;`, usar vírgula como decimal nos preços (`49,90` em vez de `49.90`), e adicionar BOM UTF-8 (`\uFEFF`) no início para o Excel reconhecer acentos corretamente. Mudar extensão para `.csv` mas com encoding correto.
+1. Adicionar coluna `Imagens` ao template CSV para quem quiser usar URLs diretas (separadas por `|`)
+2. No parser, mapear a coluna `imagens`/`images` e fazer split por `|` para preencher o array `images` do produto
 
-2. **Parser (`parseCSVLine`)**: Detectar automaticamente se o arquivo usa `;` ou `,` como separador (verificando a primeira linha/header) e parsear de acordo. Isso garante compatibilidade tanto com CSVs brasileiros quanto internacionais.
+**Arquivo: `src/pages/admin/Products.tsx` (novo componente inline ou separado)**
 
-3. **Parser de preço**: Ao ler o campo de preço, tratar vírgula como decimal (`49,90` → `49.90`) antes de converter para número.
+3. Adicionar botao "Upload Imagens em Lote" que abre um Dialog
+4. Área de drag-and-drop para múltiplos arquivos de imagem
+5. Listar os arquivos selecionados com preview de thumbnail
+6. Ao confirmar, fazer upload de cada arquivo para `product-images` bucket
+7. Extrair o SKU do nome do arquivo (parte antes do primeiro `-` ou `_` após o padrão SKU)
+8. Buscar o produto com aquele SKU e adicionar a URL pública ao array `images`
 
-### Detalhes técnicos
+### Mudancas tecnicas
 
-**`downloadTemplate()`** — gerar com `;` e BOM:
-```
-\uFEFF
-Nome;SKU;Preco;Estoque;Descricao;Descricao Curta;Badge;Status
-Batom Matte Rosa;SKU-001;49,90;100;Batom de longa duração;Batom matte;Mais Vendido;ativo
-Gloss Labial Nude;SKU-002;39,90;50;Gloss com brilho natural;Gloss nude;;ativo
-```
+- **Template CSV**: Nova coluna `Imagens` com exemplo `https://exemplo.com/foto.jpg`
+- **Parser**: `findCol(headers, 'imagens', 'images', 'fotos')` → split por `|` → array de strings
+- **Upload em lote**: Novo Dialog com input `multiple` accept `image/*`, upload ao Supabase Storage, match por SKU, update na tabela `products`
+- **Convenção de nome**: `{SKU}-{qualquer-coisa}.jpg` → associa ao produto com aquele SKU
 
-**`parseCSVLine()`** — auto-detectar separador:
-- Contar ocorrências de `;` e `,` na linha de headers
-- Usar o que tiver mais ocorrências como separador
-- Passar o separador detectado para todas as linhas
+### Fluxo do cliente
 
-**Preço** — normalizar decimal:
-- Substituir `,` por `.` no valor do preço antes do `Number()`
-
-### Impacto
-- O modelo baixado abrirá corretamente no Excel brasileiro com colunas separadas
-- A importação continuará funcionando tanto com CSV brasileiro (`;`) quanto internacional (`,`)
+1. Baixa o modelo CSV
+2. Preenche os produtos (pode deixar coluna Imagens vazia)
+3. Importa o CSV
+4. Clica em "Upload Imagens em Lote"
+5. Arrasta as fotos nomeadas com o SKU
+6. Sistema associa automaticamente
 
