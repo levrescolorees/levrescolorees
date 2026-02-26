@@ -1,55 +1,46 @@
 
 
-## Planilha completa com Preço de Custo e todos os campos do produto
+## Exclusao em massa de produtos
 
-### Problema
-A planilha modelo atual nao tem campo de preco de custo — so tem preco de venda (retail_price). Alem disso, faltam outros campos uteis como rating, reviews, margem sugerida, ideal para revenda, SEO title e meta description.
+### O que sera feito
 
-### Mudancas necessarias
+Adicionar checkboxes na tabela de produtos do admin para selecionar multiplos produtos e exclui-los de uma vez so.
 
-**1. Adicionar coluna `cost_price` na tabela `products` (migracao SQL)**
-A tabela `products` atualmente nao tem campo de preco de custo. Precisamos adicionar:
-```sql
-ALTER TABLE products ADD COLUMN cost_price numeric NOT NULL DEFAULT 0;
-```
+### Mudancas no arquivo `src/pages/admin/Products.tsx`
 
-**2. Atualizar o template CSV para incluir todos os campos**
-Nova estrutura completa da planilha:
-```text
-Nome;SKU;Preco Custo;Preco Venda;Estoque;Descricao Curta;Descricao;Badge;Status;Revenda;Margem Sugerida;Rating;Reviews;SEO Titulo;Meta Descricao;Imagens
-```
+**1. Estado de selecao**
+- Novo state `selectedIds: Set<string>` para rastrear quais produtos estao selecionados
+- Funcoes `toggleSelect(id)`, `toggleAll()`, `clearSelection()`
 
-**3. Atualizar o parser CSV**
-Adicionar mapeamento para os novos campos:
-- `Preco Custo` / `cost_price` / `custo` → `cost_price`
-- `Revenda` / `ideal_for_resale` → boolean (sim/nao)
-- `Margem Sugerida` / `suggested_margin` → numero
-- `Rating` → numero
-- `Reviews` → numero
-- `SEO Titulo` / `seo_title` → texto
-- `Meta Descricao` / `meta_description` → texto
+**2. Checkbox no header da tabela**
+- Nova coluna `<th>` com um `<Checkbox>` que seleciona/deseleciona todos os produtos filtrados de uma vez
 
-**4. Atualizar o ProductForm e PricingCard**
-Incluir o campo `cost_price` no formulario de edicao individual do produto, ao lado do preco de venda.
+**3. Checkbox em cada linha**
+- Nova coluna `<td>` com `<Checkbox>` vinculado ao `selectedIds`
 
-**5. Atualizar a exportacao CSV**
-Incluir os novos campos na exportacao tambem.
+**4. Barra de acoes em massa**
+- Quando `selectedIds.size > 0`, mostrar uma barra fixa acima da tabela com:
+  - Texto: "X produto(s) selecionado(s)"
+  - Botao "Excluir selecionados" (vermelho/destructive)
+  - Botao "Limpar selecao"
+- Ao clicar em "Excluir selecionados", abre um `AlertDialog` de confirmacao
+- Ao confirmar, faz `supabase.from('products').delete().in('id', [...selectedIds])`
+- Apos sucesso, invalida a query e limpa a selecao
 
-### Arquivos afetados
+**5. Ajuste de colSpan**
+- Atualizar o `colSpan` das linhas de loading/vazio de 7 para 8 (nova coluna de checkbox)
 
-| Arquivo | Mudanca |
-|---------|---------|
-| Migracao SQL | `ALTER TABLE products ADD COLUMN cost_price` |
-| `src/pages/admin/Products.tsx` | Template, parser, preview, exportacao |
-| `src/components/admin/product-editor/PricingCard.tsx` | Campo cost_price no formulario |
-| `src/pages/admin/ProductForm.tsx` | FormData + buildProductData com cost_price |
-| `src/hooks/useProducts.ts` | Tipo DBProduct com cost_price (se necessario) |
+### Fluxo do usuario
 
-### Template modelo (exemplo de como fica no Excel)
+1. Marca os checkboxes dos produtos que quer excluir (ou marca todos pelo header)
+2. Aparece barra com "X selecionados" e botao "Excluir selecionados"
+3. Clica em excluir, confirma no dialog
+4. Produtos sao removidos do banco e a lista atualiza
 
-```text
-Nome;SKU;Preco Custo;Preco Venda;Estoque;Descricao Curta;Descricao;Badge;Status;Revenda;Margem Sugerida;Rating;Reviews;SEO Titulo;Meta Descricao;Imagens
-Batom Matte Rosa;SKU-001;25,00;49,90;100;Batom matte;Batom de longa duracao com acabamento matte;Mais Vendido;ativo;sim;50;4.8;120;Batom Matte Rosa - Levres;Batom matte de longa duracao;https://exemplo.com/foto1.jpg|https://exemplo.com/foto2.jpg
-Gloss Labial Nude;SKU-002;18,00;39,90;50;Gloss nude;Gloss com brilho natural;;ativo;nao;0;0;0;;;
-```
+### Detalhes tecnicos
+
+- Usa o componente `Checkbox` do shadcn/ui (ja existe em `src/components/ui/checkbox.tsx`)
+- Delete via `supabase.from('products').delete().in('id', ids)` — respeita as RLS policies existentes (Admin/Operador can delete)
+- Invalida `['admin', 'products']` apos exclusao
+- A selecao e limpa automaticamente apos a exclusao ou quando o filtro de busca muda
 
