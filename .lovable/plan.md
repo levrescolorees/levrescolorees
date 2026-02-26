@@ -1,33 +1,33 @@
 
 
-## Galeria de imagens clicavel na pagina de produto
+## Produtos sem foto mostram imagem generica (lipgloss)
 
 ### Problema
-A galeria de imagens na pagina de produto (`ProductDetail.tsx`) e no preview do admin (`ProductPreviewDrawer.tsx`) nao tem estado para controlar a imagem principal. As thumbnails tem `cursor-pointer` mas nenhum `onClick` — clicar nelas nao faz nada.
 
-A imagem principal esta hardcoded como `product.images?.[0]`.
+Quando um produto nao tem imagens, o codigo usa `collectionImg` (foto de lip gloss) como fallback em todos os lugares:
+
+- `ProductCard.tsx` linha 55: `product.images?.[0] || collectionImg`
+- `ProductDetail.tsx` linha 90: `product.images?.[selectedImage] || collectionImg`
+
+Isso faz parecer que o produto tem foto quando na verdade nao tem.
 
 ### Correcao
 
-**Arquivo: `src/pages/ProductDetail.tsx`**
+Substituir o fallback `collectionImg` por um placeholder neutro em todos os componentes afetados:
 
-1. Adicionar estado `selectedImage` (indice, default 0)
-2. Imagem principal usa `product.images?.[selectedImage]` em vez de `[0]`
-3. Thumbnails mostram todas as imagens disponiveis (nao indices fixos 1-4), incluindo a primeira
-4. Cada thumbnail recebe `onClick={() => setSelectedImage(i)}`
-5. Thumbnail ativa recebe `border-primary` em vez de `border-transparent`
+**1. `src/components/ProductCard.tsx`**
+- Remover import de `collectionImg`
+- Quando `product.images` esta vazio ou nulo, mostrar um div com icone de imagem (ImageIcon do lucide) e fundo `bg-secondary` em vez de uma foto falsa
 
-**Arquivo: `src/components/admin/product-editor/ProductPreviewDrawer.tsx`**
+**2. `src/pages/ProductDetail.tsx`**
+- Remover import de `collectionImg`
+- Imagem principal: se nao ha imagens, mostrar placeholder com icone
+- Nao mostrar grid de thumbnails se nao ha imagens
 
-Mesma logica:
-1. Adicionar estado `selectedImage` (indice, default 0)
-2. Imagem principal usa `images[selectedImage]`
-3. Thumbnails mostram todas as imagens com click handler
-4. Thumbnail ativa destacada com borda
+**3. `src/components/admin/product-editor/ProductPreviewDrawer.tsx`**
+- Ja tem tratamento correto (mostra icone quando nao ha imagem) — nenhuma mudanca necessaria
 
-### Detalhes da galeria melhorada
+### Resultado visual
 
-- Thumbnails mostram ate 5 imagens (indices 0-4), todas clicaveis
-- A imagem principal e a primeira por padrao, muda ao clicar numa thumbnail
-- A thumbnail da imagem atualmente selecionada tem borda `border-primary`
+Produtos sem foto mostrarao um fundo cinza claro com um icone de imagem centralizado, deixando claro que o produto ainda nao tem fotos cadastradas.
 
