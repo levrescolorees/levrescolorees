@@ -1,46 +1,40 @@
 
 
-## Exclusao em massa de produtos
+## Planilha com 6 colunas de imagem individuais
 
-### O que sera feito
+### Problema atual
+A coluna `Imagens` usa URLs separadas por `|` numa unica celula. Isso e confuso no Excel/Google Sheets — o usuario prefere ter colunas separadas para cada foto.
 
-Adicionar checkboxes na tabela de produtos do admin para selecionar multiplos produtos e exclui-los de uma vez so.
+### Mudanca proposta
 
-### Mudancas no arquivo `src/pages/admin/Products.tsx`
+Substituir a coluna unica `Imagens` por 6 colunas individuais: `Imagem 1`, `Imagem 2`, `Imagem 3`, `Imagem 4`, `Imagem 5`, `Imagem 6`.
 
-**1. Estado de selecao**
-- Novo state `selectedIds: Set<string>` para rastrear quais produtos estao selecionados
-- Funcoes `toggleSelect(id)`, `toggleAll()`, `clearSelection()`
+### Arquivo: `src/pages/admin/Products.tsx`
 
-**2. Checkbox no header da tabela**
-- Nova coluna `<th>` com um `<Checkbox>` que seleciona/deseleciona todos os produtos filtrados de uma vez
+**1. Template CSV (`downloadTemplate`)**
+- Header: `...;Imagem 1;Imagem 2;Imagem 3;Imagem 4;Imagem 5;Imagem 6`
+- Exemplo com 2 URLs preenchidas e 4 vazias
 
-**3. Checkbox em cada linha**
-- Nova coluna `<td>` com `<Checkbox>` vinculado ao `selectedIds`
+**2. Parser (`parseRows`)**
+- Buscar colunas `imagem 1` ate `imagem 6` (alem de manter compatibilidade com `imagens` separadas por `|`)
+- Montar o array `images` a partir das 6 colunas individuais, filtrando vazias
+- Se nenhuma coluna individual for encontrada, cai no fallback da coluna `imagens` com `|`
 
-**4. Barra de acoes em massa**
-- Quando `selectedIds.size > 0`, mostrar uma barra fixa acima da tabela com:
-  - Texto: "X produto(s) selecionado(s)"
-  - Botao "Excluir selecionados" (vermelho/destructive)
-  - Botao "Limpar selecao"
-- Ao clicar em "Excluir selecionados", abre um `AlertDialog` de confirmacao
-- Ao confirmar, faz `supabase.from('products').delete().in('id', [...selectedIds])`
-- Apos sucesso, invalida a query e limpa a selecao
+**3. Exportacao (`exportCSV`)**
+- Substituir a coluna unica `Imagens` pelas 6 colunas `Imagem 1` a `Imagem 6`
+- Distribuir o array `images` do produto entre as 6 colunas
 
-**5. Ajuste de colSpan**
-- Atualizar o `colSpan` das linhas de loading/vazio de 7 para 8 (nova coluna de checkbox)
+**4. Preview da importacao**
+- Nenhuma mudanca necessaria — o preview ja mostra os dados parseados
 
-### Fluxo do usuario
+### Exemplo do novo template
 
-1. Marca os checkboxes dos produtos que quer excluir (ou marca todos pelo header)
-2. Aparece barra com "X selecionados" e botao "Excluir selecionados"
-3. Clica em excluir, confirma no dialog
-4. Produtos sao removidos do banco e a lista atualiza
+```text
+Nome;SKU;Preco Custo;Preco Venda;Estoque;Descricao Curta;Descricao;Badge;Status;Revenda;Margem Sugerida;Rating;Reviews;SEO Titulo;Meta Descricao;Imagem 1;Imagem 2;Imagem 3;Imagem 4;Imagem 5;Imagem 6
+Batom Matte Rosa;SKU-001;25,00;49,90;100;Batom matte;Descricao longa;Mais Vendido;ativo;sim;50;4.8;120;SEO Title;Meta desc;https://ex.com/foto1.jpg;https://ex.com/foto2.jpg;;;;
+```
 
-### Detalhes tecnicos
-
-- Usa o componente `Checkbox` do shadcn/ui (ja existe em `src/components/ui/checkbox.tsx`)
-- Delete via `supabase.from('products').delete().in('id', ids)` — respeita as RLS policies existentes (Admin/Operador can delete)
-- Invalida `['admin', 'products']` apos exclusao
-- A selecao e limpa automaticamente apos a exclusao ou quando o filtro de busca muda
+### Compatibilidade
+- O parser continua aceitando a coluna antiga `Imagens` com `|` como fallback
+- Se o usuario usar o formato antigo, funciona normalmente
 
