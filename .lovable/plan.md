@@ -1,44 +1,46 @@
 
 
-## Erro ao excluir produtos — FK com order_items
+## Importacao inteligente: SKU duplicado atualiza produto existente
 
-### Diagnostico
+### O que muda
 
-A tabela `order_items` tem uma foreign key `order_items_product_id_fkey` que referencia `products` com regra **NO ACTION** (nao permite deletar). Quando voce tenta excluir um produto que ja foi comprado em algum pedido, o banco rejeita a operacao.
+Quando o CSV contem um SKU que ja existe no banco, em vez de falhar, o sistema atualiza o produto existente com os novos dados da planilha. Produtos sem SKU ou com SKU novo continuam sendo inseridos normalmente.
 
-As outras tabelas (`product_variants`, `price_rules`, `collection_products`) ja usam **CASCADE** e funcionam normalmente.
+### Mudancas no arquivo `src/pages/admin/Products.tsx`
 
-### Correcao
+**1. `confirmImport` — logica de upsert por SKU**
 
-**1. Migracao SQL — alterar a FK de `order_items.product_id` para SET NULL**
+Antes de inserir, separar os registros em dois grupos:
+- **Com SKU**: buscar no banco quais SKUs ja existem via `supabase.from('products').select('id, sku').in('sku', skus)`
+- **SKU existente** → fazer `update` no produto correspondente (sem alterar slug nem id)
+- **SKU novo ou sem SKU** → fazer `insert` como ja faz hoje
 
-Isso faz sentido porque os pedidos devem ser preservados mesmo apos excluir um produto. O campo `product_name` ja armazena o nome do produto no item do pedido, entao o historico nao se perde.
+Fluxo detalhado:
+1. Coletar todos os SKUs nao-nulos dos registros validos
+2. Consultar o banco: `SELECT id, sku FROM products WHERE sku IN (...)`
+3. Montar um mapa `skuToId: Record<string, string>`
+4. Separar `toInsert` (sem SKU ou SKU novo) e `toUpdate` (SKU ja existe)
+5. Para cada item em `toUpdate`, fazer `supabase.from('products').update({...}).eq('id', skuToId[sku])`
+6. Para `toInsert`, manter o insert em batches como ja esta
 
-```sql
-ALTER TABLE order_items
-  DROP CONSTRAINT order_items_product_id_fkey,
-  ADD CONSTRAINT order_items_product_id_fkey
-    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL;
-```
+**2. Feedback ao usuario**
 
-Tambem alterar `variant_id` (mesma logica):
-```sql
-ALTER TABLE order_items
-  DROP CONSTRAINT order_items_variant_id_fkey,
-  ADD CONSTRAINT order_items_variant_id_fkey
-    FOREIGN KEY (variant_id) REFERENCES product_variants(id) ON DELETE SET NULL;
-```
+Toast final mostra contagem separada:
+- "X produto(s) importado(s), Y atualizado(s)"
+- Se houver falhas: "Z falharam"
 
-**2. Nenhuma mudanca no codigo**
+**3. Preview — indicar quais serao atualizados**
 
-O codigo de exclusao em massa ja esta correto. O erro vem exclusivamente da restricao do banco.
+No dialog de preview, marcar com um badge "Atualizar" os produtos cujo SKU ja existe, e "Novo" os demais. Isso requer buscar os SKUs existentes no momento do parse/preview.
 
-### Resultado
-Apos a migracao, ao excluir um produto que ja foi pedido, o `product_id` nos itens do pedido sera setado para `null`, mantendo o historico do pedido intacto (nome, preco, quantidade continuam salvos).
+### Exemplo de fluxo
 
-### Arquivo afetado
+1. Usuario importa CSV com 10 produtos, 3 deles tem SKU que ja existe no banco
+2. Preview mostra: 7 novos, 3 atualizacoes
+3. Ao confirmar: 7 sao inseridos, 3 sao atualizados
+4. Toast: "7 importado(s), 3 atualizado(s)!"
 
-| Arquivo | Mudanca |
-|---------|---------|
-| Migracao SQL | Alterar FK de `order_items` para SET NULL |
+### Nenhuma mudanca no banco
+
+Nao ha constraint unique no SKU atualmente, entao a logica de match e feita no codigo. O update usa o `id` do produto encontrado.
 
