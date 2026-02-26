@@ -115,29 +115,30 @@ const ProductForm = () => {
     return Object.keys(e).length === 0;
   };
 
-  const buildProductData = () => ({
-    name: form.name, slug: form.slug, sku: form.sku || null,
-    short_description: form.short_description, description: form.description,
-    retail_price: parseFloat(form.retail_price) || 0,
-    cost_price: parseFloat(form.cost_price) || 0,
-    stock: parseInt(form.stock) || 0, badge: form.badge || null,
-    is_active: form.status === 'published',
-    ideal_for_resale: form.ideal_for_resale,
-    suggested_margin: parseFloat(form.suggested_margin) || 0,
-    rating: parseFloat(form.rating) || 0,
-    reviews_count: parseInt(form.reviews_count) || 0,
-    status: form.status,
-    published_at: form.published_at,
-    seo_title: form.seo_title,
-    meta_description: form.meta_description,
-    images: form.images,
+  const buildProductData = (source: FormData) => ({
+    name: source.name, slug: source.slug, sku: source.sku || null,
+    short_description: source.short_description, description: source.description,
+    retail_price: parseFloat(source.retail_price) || 0,
+    cost_price: parseFloat(source.cost_price) || 0,
+    stock: parseInt(source.stock) || 0, badge: source.badge || null,
+    is_active: source.status === 'published',
+    ideal_for_resale: source.ideal_for_resale,
+    suggested_margin: parseFloat(source.suggested_margin) || 0,
+    rating: parseFloat(source.rating) || 0,
+    reviews_count: parseInt(source.reviews_count) || 0,
+    status: source.status,
+    published_at: source.published_at,
+    seo_title: source.seo_title,
+    meta_description: source.meta_description,
+    images: source.images,
   });
 
-  const saveProduct = useCallback(async (redirect = false) => {
+  const saveProduct = useCallback(async (redirect = false, overrides?: Partial<FormData>) => {
     if (!validate()) return;
     setSaving(true);
     try {
-      const productData = buildProductData();
+      const merged = overrides ? { ...form, ...overrides } : form;
+      const productData = buildProductData(merged);
       let pid = productId;
 
       if (isNew && !pid) {
@@ -223,21 +224,22 @@ const ProductForm = () => {
       toast.error('Preencha os campos obrigatórios para publicar');
       return;
     }
-    setForm(prev => ({ ...prev, status: 'published', published_at: new Date().toISOString(), is_active: true }));
-    // Save after state update
-    setTimeout(() => saveProduct(false), 50);
+    const overrides: Partial<FormData> = { status: 'published', published_at: new Date().toISOString(), is_active: true };
+    setForm(prev => ({ ...prev, ...overrides }));
+    saveProduct(false, overrides);
   };
 
   const handleUnpublish = () => {
-    setForm(prev => ({ ...prev, status: 'draft', is_active: false }));
-    setTimeout(() => saveProduct(false), 50);
+    const overrides: Partial<FormData> = { status: 'draft', is_active: false };
+    setForm(prev => ({ ...prev, ...overrides }));
+    saveProduct(false, overrides);
   };
 
   const handleDuplicate = async () => {
     if (!productId) return;
     setSaving(true);
     try {
-      const cloneData = { ...buildProductData(), status: 'draft', is_active: false, published_at: null };
+      const cloneData = { ...buildProductData(form), status: 'draft', is_active: false, published_at: null };
       // Generate unique slug
       let newSlug = `${form.slug}-copia`;
       const { data: existing } = await supabase.from('products').select('slug').like('slug', `${form.slug}-copia%`);
