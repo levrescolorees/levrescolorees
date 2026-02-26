@@ -1,14 +1,13 @@
 import { useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Star, Minus, Plus, ShoppingBag, ChevronLeft, Truck, ShieldCheck, Award, Loader2 } from 'lucide-react';
+import { Star, Minus, Plus, ShoppingBag, ChevronLeft, Truck, ShieldCheck, Award, Loader2, ImageIcon } from 'lucide-react';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import CartDrawer from '@/components/CartDrawer';
 import ProductCard from '@/components/ProductCard';
 import { useProductBySlug, useStorefrontProducts, formatCurrency, getSmartPriceFromRules } from '@/hooks/useProducts';
 import { useCart } from '@/context/CartContext';
-import collectionImg from '@/assets/collection-lipgloss.jpg';
 
 const ProductDetail = () => {
   const { slug } = useParams();
@@ -87,7 +86,13 @@ const ProductDetail = () => {
           {/* Gallery */}
           <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="space-y-3">
             <div className="aspect-square rounded-sm overflow-hidden bg-secondary">
-              <img src={product.images?.[selectedImage] || collectionImg} alt={product.name} className="w-full h-full object-cover" />
+              {product.images?.[selectedImage] ? (
+                <img src={product.images[selectedImage]} alt={product.name} className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center">
+                  <ImageIcon className="w-16 h-16 text-muted-foreground/50" />
+                </div>
+              )}
             </div>
             {product.images && product.images.length > 1 && (
               <div className="grid grid-cols-4 gap-2">
