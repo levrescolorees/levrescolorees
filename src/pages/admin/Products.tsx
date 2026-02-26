@@ -182,16 +182,21 @@ const Products = () => {
   const [bulkCollectionOpen, setBulkCollectionOpen] = useState(false);
   const [selectedCollectionId, setSelectedCollectionId] = useState('');
   const [bulkCollectionLoading, setBulkCollectionLoading] = useState(false);
-
+  const [filterCollectionId, setFilterCollectionId] = useState<string>('all');
   // Preview state
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewData, setPreviewData] = useState<{ valid: ParsedRow[]; skipped: { line: number; reason: string }[] }>({ valid: [], skipped: [] });
   const [existingSkuMap, setExistingSkuMap] = useState<Map<string, string>>(new Map()); // sku -> id
 
-  const filtered = products?.filter(p =>
-    p.name.toLowerCase().includes(search.toLowerCase()) ||
-    p.sku?.toLowerCase().includes(search.toLowerCase())
-  ) ?? [];
+  const filtered = (products ?? []).filter(p => {
+    const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase()) ||
+      p.sku?.toLowerCase().includes(search.toLowerCase());
+    const matchesCollection = filterCollectionId === 'all' ||
+      filterCollectionId === 'none'
+        ? !(p as any).collections?.length
+        : ((p as any).collections as any[])?.some((c: any) => c.id === filterCollectionId);
+    return matchesSearch && (filterCollectionId === 'all' || matchesCollection);
+  });
 
   // Clear selection when search changes
   useEffect(() => { setSelectedIds(new Set()); }, [search]);
@@ -402,14 +407,28 @@ const Products = () => {
         </div>
       </div>
 
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input
-          placeholder="Buscar por nome ou SKU..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="pl-9 font-body"
-        />
+      <div className="flex items-center gap-3">
+        <div className="relative max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            placeholder="Buscar por nome ou SKU..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="pl-9 font-body"
+          />
+        </div>
+        <Select value={filterCollectionId} onValueChange={setFilterCollectionId}>
+          <SelectTrigger className="w-[200px] font-body">
+            <SelectValue placeholder="Todas as coleções" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todas as coleções</SelectItem>
+            <SelectItem value="none">Sem coleção</SelectItem>
+            {(collections || []).map(c => (
+              <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Bulk action bar */}

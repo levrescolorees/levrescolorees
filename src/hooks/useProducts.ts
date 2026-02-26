@@ -148,15 +148,20 @@ export function useAdminProducts() {
       if (error) throw error;
 
       const ids = (data as DBProduct[]).map(p => p.id);
-      const [{ data: variants }, { data: priceRules }] = await Promise.all([
+      const [{ data: variants }, { data: priceRules }, { data: collectionProducts }] = await Promise.all([
         supabase.from('product_variants').select('*').in('product_id', ids).order('sort_order'),
         supabase.from('price_rules').select('*').in('product_id', ids).order('min_quantity'),
+        supabase.from('collection_products').select('*, collections(*)').in('product_id', ids),
       ]);
 
       return (data as DBProduct[]).map(p => ({
         ...p,
         variants: (variants as DBVariant[] || []).filter(v => v.product_id === p.id),
         priceRules: (priceRules as DBPriceRule[] || []).filter(r => r.product_id === p.id),
+        collections: (collectionProducts as any[] || [])
+          .filter(cp => cp.product_id === p.id)
+          .map(cp => cp.collections)
+          .filter(Boolean) as DBCollection[],
       }));
     },
   });
