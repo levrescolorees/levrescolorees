@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Search, ToggleLeft, ToggleRight, Pencil, Trash2, Download, Upload, FileDown, Image, X, RefreshCw } from 'lucide-react';
-import { useAdminProducts, useDeleteProduct, useToggleProduct, formatCurrency } from '@/hooks/useProducts';
+import { Plus, Search, ToggleLeft, ToggleRight, Pencil, Trash2, Download, Upload, FileDown, Image, X, RefreshCw, FolderPlus } from 'lucide-react';
+import { useAdminProducts, useDeleteProduct, useToggleProduct, useCollections, formatCurrency } from '@/hooks/useProducts';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
 import { Input } from '@/components/ui/input';
@@ -16,6 +16,7 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import BulkImageUpload from '@/components/admin/BulkImageUpload';
 
 /* ── CSV helpers ── */
@@ -167,6 +168,7 @@ function downloadTemplate() {
 
 const Products = () => {
   const { data: products, isLoading } = useAdminProducts();
+  const { data: collections } = useCollections();
   const deleteProduct = useDeleteProduct();
   const toggleProduct = useToggleProduct();
   const qc = useQueryClient();
@@ -177,6 +179,9 @@ const Products = () => {
   const [bulkImageOpen, setBulkImageOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkCollectionOpen, setBulkCollectionOpen] = useState(false);
+  const [selectedCollectionId, setSelectedCollectionId] = useState('');
+  const [bulkCollectionLoading, setBulkCollectionLoading] = useState(false);
 
   // Preview state
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -217,6 +222,39 @@ const Products = () => {
     } finally {
       setBulkDeleting(false);
       setBulkDeleteOpen(false);
+    }
+  };
+
+  const confirmBulkCollection = async () => {
+    if (!selectedCollectionId) return;
+    setBulkCollectionLoading(true);
+    try {
+      const productIds = Array.from(selectedIds);
+      // Fetch existing entries to avoid duplicates
+      const { data: existing } = await supabase
+        .from('collection_products')
+        .select('product_id')
+        .eq('collection_id', selectedCollectionId)
+        .in('product_id', productIds);
+      const existingSet = new Set((existing || []).map(e => e.product_id));
+      const toInsert = productIds
+        .filter(pid => !existingSet.has(pid))
+        .map(pid => ({ collection_id: selectedCollectionId, product_id: pid }));
+      if (toInsert.length > 0) {
+        const { error } = await supabase.from('collection_products').insert(toInsert);
+        if (error) throw error;
+      }
+      qc.invalidateQueries({ queryKey: ['collections'] });
+      qc.invalidateQueries({ queryKey: ['admin', 'products'] });
+      const skipped = productIds.length - toInsert.length;
+      toast.success(`${toInsert.length} produto(s) adicionado(s) à coleção!${skipped > 0 ? ` (${skipped} já estavam)` : ''}`);
+      setSelectedIds(new Set());
+    } catch (err: any) {
+      toast.error('Erro ao adicionar à coleção: ' + (err.message || 'Tente novamente.'));
+    } finally {
+      setBulkCollectionLoading(false);
+      setBulkCollectionOpen(false);
+      setSelectedCollectionId('');
     }
   };
 
@@ -378,6 +416,9 @@ const Products = () => {
       {selectedIds.size > 0 && (
         <div className="flex items-center gap-3 bg-muted/80 border border-border rounded-lg px-4 py-2">
           <span className="font-body text-sm text-foreground font-medium">{selectedIds.size} produto(s) selecionado(s)</span>
+          <Button variant="outline" size="sm" onClick={() => setBulkCollectionOpen(true)}>
+            <FolderPlus className="w-4 h-4 mr-2" /> Adicionar a coleção
+          </Button>
           <Button variant="destructive" size="sm" onClick={() => setBulkDeleteOpen(true)}>
             <Trash2 className="w-4 h-4 mr-2" /> Excluir selecionados
           </Button>
@@ -576,6 +617,34 @@ const Products = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Bulk Add to Collection */}
+      <Dialog open={bulkCollectionOpen} onOpenChange={(open) => { setBulkCollectionOpen(open); if (!open) setSelectedCollectionId(''); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Adicionar a coleção</DialogTitle>
+            <DialogDescription>
+              Selecione a coleção para adicionar {selectedIds.size} produto(s).
+            </DialogDescription>
+          </DialogHeader>
+          <Select value={selectedCollectionId} onValueChange={setSelectedCollectionId}>
+            <SelectTrigger>
+              <SelectValue placeholder="Selecione uma coleção..." />
+            </SelectTrigger>
+            <SelectContent>
+              {(collections || []).map(c => (
+                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkCollectionOpen(false)}>Cancelar</Button>
+            <Button onClick={confirmBulkCollection} disabled={!selectedCollectionId || bulkCollectionLoading}>
+              {bulkCollectionLoading ? 'Adicionando...' : 'Confirmar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
