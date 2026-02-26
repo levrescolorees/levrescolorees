@@ -37,9 +37,13 @@ export default function ImageUploadRow({ label, description, value, onChange, fo
       return;
     }
 
-    // Create object URL and open crop modal
-    const url = URL.createObjectURL(file);
-    setCropSrc(url);
+    if (aspect === undefined) {
+      // No aspect = skip crop, upload original directly
+      handleCropConfirm(file);
+    } else {
+      const url = URL.createObjectURL(file);
+      setCropSrc(url);
+    }
     if (inputRef.current) inputRef.current.value = '';
   };
 
