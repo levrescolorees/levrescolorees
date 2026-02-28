@@ -1,36 +1,29 @@
 
 
-## Gerenciamento de Usuarios nas Configuracoes
+## Otimizacao de Performance do Admin
 
-### Contexto
-- Roles existentes no enum `app_role`: `admin`, `operador`, `financeiro`
-- O usuario quer dois perfis: **Super Admin** (admin + financeiro) e **Admin** (operador, sem acesso financeiro)
-- Para criar usuarios via admin, precisamos de uma edge function (pois `supabase.auth.admin.createUser` requer service_role_key)
+### Problema
+Todas as queries admin refazem fetch a cada montagem/foco de aba porque nao tem `staleTime`. O Dashboard carrega dados completos (produtos com variants, price_rules, collections) apenas para contar e mostrar KPIs.
 
 ### Mudancas
 
-**1. Edge Function `supabase/functions/create-admin-user/index.ts`**
-- Recebe `{ email, password, name, role }` onde role e `"super_admin"` ou `"admin_only"`
-- Valida que o chamador e admin (verifica JWT + has_role)
-- Usa `createClient` com service_role_key para criar o usuario via `auth.admin.createUser`
-- Insere role(s) na tabela `user_roles`:
-  - Super Admin → insere role `admin` + `financeiro`
-  - Admin → insere role `operador`
-- Insere profile na tabela `profiles`
+**1. `src/App.tsx` — QueryClient defaults**
+- Adicionar `defaultOptions.queries.staleTime: 30_000` (30s) e `refetchOnWindowFocus: false` no QueryClient
 
-**2. Nova aba "Usuarios" em `src/pages/admin/AdminSettings.tsx`**
-- Adicionar tab "Usuarios" com icone `Users`
-- Lista usuarios existentes (query `user_roles` + `profiles`)
-- Formulario para adicionar usuario: email, senha, nome, tipo (Super Admin / Admin)
-- Botao para remover usuario (delete role + nota que o auth user permanece)
-- Cada usuario listado mostra nome, email e tipo
+**2. `src/hooks/useProducts.ts` — staleTime nas queries admin**
+- `useAdminProducts`: adicionar `staleTime: 60_000`
+- `useStorefrontProducts`: adicionar `staleTime: 60_000`
+- `useCollections`: adicionar `staleTime: 60_000`
 
-**3. Hook `src/hooks/useAdminUsers.ts`**
-- Query para listar `user_roles` com join em `profiles`
-- Mutation para criar usuario (chama edge function)
-- Mutation para remover role
+**3. `src/hooks/useOrders.ts` — staleTime**
+- `useAdminOrders`: adicionar `staleTime: 30_000`
+- `useAdminCustomers`: adicionar `staleTime: 60_000`
 
-### Mapeamento de roles
-- **Super Admin**: roles `admin` + `financeiro` → acesso total incluindo financeiro
-- **Admin**: role `operador` → acesso ao painel sem opcoes financeiras
+**4. `src/pages/admin/Dashboard.tsx` — queries leves**
+- Substituir `useAdminProducts()` por query leve: `select('id, name, stock, is_active')` sem joins em variants/priceRules/collections
+- Substituir `useAdminOrders()` por query leve: `select('id, status, total, created_at')` sem join em customers
+- Adicionar `staleTime: 30_000` nas queries do dashboard
+
+**5. `src/hooks/useAdminUsers.ts` — staleTime**
+- Adicionar `staleTime: 60_000`
 
