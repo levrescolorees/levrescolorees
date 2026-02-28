@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, Suspense } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { AdminSidebar } from '@/components/admin/AdminSidebar';
@@ -41,7 +41,9 @@ const AdminLayout = () => {
             <h1 className="font-body text-sm font-medium text-foreground">Painel Administrativo</h1>
           </header>
           <main className="flex-1 p-6 bg-muted/30 overflow-auto">
-            <Outlet />
+            <Suspense fallback={<div className="flex-1 flex items-center justify-center p-8"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>}>
+              <Outlet />
+            </Suspense>
           </main>
         </div>
       </div>
