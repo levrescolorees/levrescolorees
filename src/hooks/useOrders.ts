@@ -63,6 +63,7 @@ export interface DBStatusHistory {
 export function useAdminOrders(statusFilter?: OrderStatus) {
   return useQuery({
     queryKey: ['admin', 'orders', statusFilter],
+    staleTime: 30_000,
     queryFn: async () => {
       let query = supabase
         .from('orders')
@@ -162,6 +163,7 @@ export function useUpdateTracking() {
 export function useAdminCustomers() {
   return useQuery({
     queryKey: ['admin', 'customers'],
+    staleTime: 60_000,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('customers')

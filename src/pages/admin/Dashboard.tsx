@@ -1,7 +1,6 @@
 import { useMemo } from 'react';
 import { Package, FolderOpen, ShoppingCart, TrendingUp, DollarSign, AlertTriangle, Clock, Users } from 'lucide-react';
-import { useAdminProducts, useCollections } from '@/hooks/useProducts';
-import { useAdminOrders } from '@/hooks/useOrders';
+import { useCollections } from '@/hooks/useProducts';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
@@ -9,9 +8,31 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pi
 const formatCurrency = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 const Dashboard = () => {
-  const { data: products } = useAdminProducts();
+  const { data: products } = useQuery({
+    queryKey: ['admin', 'dashboard-products'],
+    staleTime: 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('products')
+        .select('id, name, stock, is_active')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data as Array<{ id: string; name: string; stock: number; is_active: boolean }>;
+    },
+  });
   const { data: collections } = useCollections();
-  const { data: orders } = useAdminOrders();
+  const { data: orders } = useQuery({
+    queryKey: ['admin', 'dashboard-orders'],
+    staleTime: 30_000,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('orders')
+        .select('id, status, total, created_at')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data as Array<{ id: string; status: string; total: number; created_at: string }>;
+    },
+  });
   const { data: customers } = useQuery({
     queryKey: ['admin', 'customers-count'],
     queryFn: async () => {

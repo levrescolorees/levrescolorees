@@ -62,6 +62,7 @@ export interface DBCollection {
 export function useStorefrontProducts() {
   return useQuery({
     queryKey: ['products', 'storefront'],
+    staleTime: 60_000,
     queryFn: async () => {
       const { data: products, error } = await supabase
         .from('products')
@@ -123,6 +124,7 @@ export function useProductBySlug(slug: string | undefined) {
 export function useCollections() {
   return useQuery({
     queryKey: ['collections'],
+    staleTime: 60_000,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('collections')
@@ -140,6 +142,7 @@ export function useCollections() {
 export function useAdminProducts() {
   return useQuery({
     queryKey: ['admin', 'products'],
+    staleTime: 60_000,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('products')
