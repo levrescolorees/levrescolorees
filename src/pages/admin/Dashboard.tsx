@@ -35,6 +35,7 @@ const Dashboard = () => {
   });
   const { data: customers } = useQuery({
     queryKey: ['admin', 'customers-count'],
+    staleTime: 60_000,
     queryFn: async () => {
       const { count, error } = await supabase.from('customers').select('*', { count: 'exact', head: true });
       if (error) throw error;
