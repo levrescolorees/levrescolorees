@@ -14,6 +14,7 @@ export const useAdminUsers = () => {
 
   const query = useQuery({
     queryKey: ['admin', 'users'],
+    staleTime: 60_000,
     queryFn: async (): Promise<AdminUser[]> => {
       // Get all roles
       const { data: roles, error: rolesErr } = await supabase
