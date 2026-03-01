@@ -1,30 +1,41 @@
 
 
-## Validação de CPF e CNPJ no Checkout
+## Diagnóstico: Logo salva no banco mas não recarrega
 
-### O que existe hoje
-- Step 1 valida apenas que o CPF tem 11 dígitos (`form.cpf.replace(/\D/g, '').length === 11`) — sem verificação dos dígitos verificadores
-- CNPJ não tem nenhuma validação (apenas máscara)
-- Nenhum feedback visual de erro inline
+### Causa raiz
+O hook `useStoreSettings()` chama `supabase.rpc('get_public_store_settings')`, mas **essa RPC não existe no banco**. Resultado: o tema salvo nunca é carregado de volta, então a logo (e qualquer customização) some ao recarregar a página.
 
-### O que será implementado
+A logo de fato é persistida corretamente no storage e no `store_settings` (confirmei: `store_settings.theme.components.images.logo` tem a URL). O problema é exclusivamente na leitura.
 
-**1. Funções de validação** — criar `src/lib/validators.ts`
-- `isValidCPF(cpf: string): boolean` — algoritmo dos 2 dígitos verificadores (módulo 11), rejeita sequências repetidas (111.111.111-11, etc.)
-- `isValidCNPJ(cnpj: string): boolean` — algoritmo dos 2 dígitos verificadores (módulo 11), rejeita sequências repetidas
+### Solução
 
-**2. Atualizar `Checkout.tsx`**
-- Importar as funções de validação
-- Alterar `isStep1Valid` para chamar `isValidCPF()` em vez de apenas checar `.length === 11`
-- Se `form.isWholesale`, exigir também `isValidCNPJ(form.cnpj)`
-- Adicionar estado `touched` para CPF e CNPJ (marca como tocado no `onBlur`)
-- Exibir mensagem de erro inline vermelha abaixo do campo quando tocado e inválido: "CPF inválido" / "CNPJ inválido"
-- Manter as máscaras existentes intactas
+Criar a RPC `get_public_store_settings` que retorna todas as settings públicas como um objeto JSON.
 
-**3. Arquivos**
+**1. Migration SQL** — criar a função `get_public_store_settings`
 
-| Arquivo | Mudança |
-|---|---|
-| `src/lib/validators.ts` | Novo — `isValidCPF`, `isValidCNPJ` |
-| `src/pages/Checkout.tsx` | Importar validadores, atualizar `isStep1Valid`, adicionar feedback inline |
+```sql
+CREATE OR REPLACE FUNCTION public.get_public_store_settings()
+RETURNS jsonb
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = 'public'
+AS $$
+  SELECT COALESCE(
+    jsonb_object_agg(key, value),
+    '{}'::jsonb
+  )
+  FROM store_settings;
+$$;
+```
+
+Isso faz `supabase.rpc('get_public_store_settings')` retornar `{ "theme": {...}, "brand": {...}, ... }`, que é exatamente o formato esperado por `useStoreSettings` e `ThemeProvider`.
+
+**2. Arquivos impactados**: Nenhum — o código front-end já está correto. Só falta a função no banco.
+
+### Resultado esperado
+Após a migration, ao abrir o Editor de Tema:
+- Logo e Hero Banner salvos serão carregados corretamente
+- Cores, fontes e demais customizações também persistirão entre sessões
+- A loja pública também refletirá o tema salvo (ThemeProvider usa o mesmo hook)
 
