@@ -663,6 +663,31 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_products_list: {
+        Args: {
+          p_collection_id?: string
+          p_limit?: number
+          p_offset?: number
+          p_search?: string
+        }
+        Returns: {
+          badge: string
+          collections: Json
+          id: string
+          is_active: boolean
+          name: string
+          price_rules_count: number
+          retail_price: number
+          sku: string
+          slug: string
+          status: string
+          stock: number
+          thumbnail: string
+          total_count: number
+          updated_at: string
+          variants_count: number
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -672,6 +697,8 @@ export type Database = {
       }
       is_admin_or_operador: { Args: { _user_id: string }; Returns: boolean }
       is_staff: { Args: { _user_id: string }; Returns: boolean }
+      show_limit: { Args: never; Returns: number }
+      show_trgm: { Args: { "": string }; Returns: string[] }
     }
     Enums: {
       app_role: "admin" | "operador" | "financeiro"

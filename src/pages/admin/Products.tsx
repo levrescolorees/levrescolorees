@@ -1,12 +1,13 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Search, ToggleLeft, ToggleRight, Pencil, Trash2, Download, Upload, FileDown, Image, X, RefreshCw, FolderPlus } from 'lucide-react';
-import { useAdminProducts, useDeleteProduct, useToggleProduct, useCollections, formatCurrency } from '@/hooks/useProducts';
+import { Plus, Search, ToggleLeft, ToggleRight, Pencil, Trash2, Download, Upload, FileDown, Image, X, RefreshCw, FolderPlus, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useAdminProductsList, useDeleteProduct, useToggleProduct, useCollections, formatCurrency } from '@/hooks/useProducts';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -20,6 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import BulkImageUpload from '@/components/admin/BulkImageUpload';
 
 /* ── CSV helpers ── */
+// ... keep existing code (detectSeparator, parseCSVLine, parsePrice, findCol, ParsedRow, parseRows, downloadTemplate — lines 24-165)
 
 function detectSeparator(headerLine: string): string {
   const semicolons = (headerLine.match(/;/g) || []).length;
@@ -48,7 +50,6 @@ function parseCSVLine(line: string, sep: string): string[] {
 }
 
 function parsePrice(val: string): number {
-  // Handle Brazilian format: "49,90" → 49.90
   const normalized = val.replace(/\./g, '').replace(',', '.');
   return Number(normalized) || 0;
 }
@@ -164,15 +165,46 @@ function downloadTemplate() {
   URL.revokeObjectURL(url);
 }
 
+/* ── Debounce hook ── */
+function useDebouncedValue<T>(value: T, delay: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(t);
+  }, [value, delay]);
+  return debounced;
+}
+
+/* ── Skeleton rows ── */
+const SkeletonRows = () => (
+  <>
+    {Array.from({ length: 6 }).map((_, i) => (
+      <tr key={i} className="border-b border-border">
+        <td className="px-4 py-3"><Skeleton className="h-4 w-4" /></td>
+        <td className="px-4 py-3"><Skeleton className="h-4 w-32" /></td>
+        <td className="px-4 py-3"><Skeleton className="h-4 w-16" /></td>
+        <td className="px-4 py-3"><Skeleton className="h-4 w-20" /></td>
+        <td className="px-4 py-3"><Skeleton className="h-4 w-12" /></td>
+        <td className="px-4 py-3"><Skeleton className="h-4 w-16" /></td>
+        <td className="px-4 py-3"><Skeleton className="h-4 w-14" /></td>
+        <td className="px-4 py-3"><Skeleton className="h-4 w-16" /></td>
+      </tr>
+    ))}
+  </>
+);
+
+const PAGE_SIZE = 25;
+
 /* ── Component ── */
 
 const Products = () => {
-  const { data: products, isLoading } = useAdminProducts();
   const { data: collections } = useCollections();
   const deleteProduct = useDeleteProduct();
   const toggleProduct = useToggleProduct();
   const qc = useQueryClient();
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebouncedValue(search, 300);
+  const [page, setPage] = useState(0);
   const [importing, setImporting] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -183,25 +215,22 @@ const Products = () => {
   const [selectedCollectionId, setSelectedCollectionId] = useState('');
   const [bulkCollectionLoading, setBulkCollectionLoading] = useState(false);
   const [filterCollectionId, setFilterCollectionId] = useState<string>('all');
-  // Preview state
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewData, setPreviewData] = useState<{ valid: ParsedRow[]; skipped: { line: number; reason: string }[] }>({ valid: [], skipped: [] });
-  const [existingSkuMap, setExistingSkuMap] = useState<Map<string, string>>(new Map()); // sku -> id
+  const [existingSkuMap, setExistingSkuMap] = useState<Map<string, string>>(new Map());
 
-  const filtered = (products ?? []).filter(p => {
-    const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase()) ||
-      p.sku?.toLowerCase().includes(search.toLowerCase());
-    const matchesCollection =
-      filterCollectionId === 'all'
-        ? true
-        : filterCollectionId === 'none'
-          ? !(p as any).collections?.length
-          : ((p as any).collections as any[])?.some((c: any) => c.id === filterCollectionId);
-    return matchesSearch && matchesCollection;
-  });
+  const rpcCollectionId = filterCollectionId === 'all' || filterCollectionId === 'none' ? null : filterCollectionId;
+  const { data, isLoading, isPlaceholderData } = useAdminProductsList(debouncedSearch, rpcCollectionId, page, PAGE_SIZE);
 
-  // Clear selection when search changes
-  useEffect(() => { setSelectedIds(new Set()); }, [search]);
+  // For "none" collection filter, do client-side filtering
+  const rows = filterCollectionId === 'none'
+    ? (data?.rows || []).filter(p => !p.collections || p.collections.length === 0)
+    : (data?.rows || []);
+  const totalCount = data?.totalCount ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+
+  // Reset page when filters change
+  useEffect(() => { setPage(0); setSelectedIds(new Set()); }, [debouncedSearch, filterCollectionId]);
 
   const toggleSelect = (id: string) => {
     setSelectedIds(prev => {
@@ -212,16 +241,21 @@ const Products = () => {
   };
 
   const toggleAll = () => {
-    if (selectedIds.size === filtered.length) setSelectedIds(new Set());
-    else setSelectedIds(new Set(filtered.map(p => p.id)));
+    if (selectedIds.size === rows.length) setSelectedIds(new Set());
+    else setSelectedIds(new Set(rows.map(p => p.id)));
   };
+
+  const invalidateProducts = useCallback(() => {
+    qc.invalidateQueries({ queryKey: ['admin', 'products-list'] });
+    qc.invalidateQueries({ queryKey: ['admin', 'products'] });
+  }, [qc]);
 
   const confirmBulkDelete = async () => {
     setBulkDeleting(true);
     try {
       const { error } = await supabase.from('products').delete().in('id', Array.from(selectedIds));
       if (error) throw error;
-      qc.invalidateQueries({ queryKey: ['admin', 'products'] });
+      invalidateProducts();
       toast.success(`${selectedIds.size} produto(s) excluído(s)!`);
       setSelectedIds(new Set());
     } catch (err: any) {
@@ -237,7 +271,6 @@ const Products = () => {
     setBulkCollectionLoading(true);
     try {
       const productIds = Array.from(selectedIds);
-      // Fetch existing entries to avoid duplicates
       const { data: existing } = await supabase
         .from('collection_products')
         .select('product_id')
@@ -252,7 +285,7 @@ const Products = () => {
         if (error) throw error;
       }
       qc.invalidateQueries({ queryKey: ['collections'] });
-      qc.invalidateQueries({ queryKey: ['admin', 'products'] });
+      invalidateProducts();
       const skipped = productIds.length - toInsert.length;
       toast.success(`${toInsert.length} produto(s) adicionado(s) à coleção!${skipped > 0 ? ` (${skipped} já estavam)` : ''}`);
       setSelectedIds(new Set());
@@ -266,21 +299,10 @@ const Products = () => {
   };
 
   const exportCSV = () => {
-    if (!filtered.length) return;
-    const headers = ['Nome', 'SKU', 'Preco Custo', 'Preco Venda', 'Estoque', 'Descricao Curta', 'Descricao', 'Badge', 'Status', 'Revenda', 'Margem Sugerida', 'Rating', 'Reviews', 'SEO Titulo', 'Meta Descricao', 'Imagem 1', 'Imagem 2', 'Imagem 3', 'Imagem 4', 'Imagem 5', 'Imagem 6'];
-    const rows = filtered.map(p => {
-      const imgs = p.images || [];
-      return [
-        p.name, p.sku || '', (p as any).cost_price || 0, p.retail_price, p.stock,
-        p.short_description || '', p.description || '', p.badge || '',
-        p.is_active ? 'ativo' : 'inativo',
-        p.ideal_for_resale ? 'sim' : 'nao', p.suggested_margin || 0,
-        p.rating || 0, p.reviews_count || 0,
-        p.seo_title || '', p.meta_description || '',
-        imgs[0] || '', imgs[1] || '', imgs[2] || '', imgs[3] || '', imgs[4] || '', imgs[5] || '',
-      ];
-    });
-    const csv = '\uFEFF' + [headers, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(';')).join('\n');
+    if (!rows.length) return;
+    const headers = ['Nome', 'SKU', 'Preco Venda', 'Estoque', 'Badge', 'Status'];
+    const csvRows = rows.map(p => [p.name, p.sku || '', p.retail_price, p.stock, p.badge || '', p.is_active ? 'ativo' : 'inativo']);
+    const csv = '\uFEFF' + [headers, ...csvRows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(';')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href = url; a.download = 'produtos.csv'; a.click();
@@ -301,7 +323,6 @@ const Products = () => {
         return;
       }
 
-      // Fetch existing SKUs to detect updates
       const skusFromCsv = result.valid.map(r => r.sku).filter((s): s is string => !!s);
       const skuMap = new Map<string, string>();
       if (skusFromCsv.length > 0) {
@@ -316,7 +337,6 @@ const Products = () => {
         }
       }
       setExistingSkuMap(skuMap);
-
       setPreviewData(result);
       setPreviewOpen(true);
     } catch {
@@ -345,38 +365,25 @@ const Products = () => {
         }
       }
 
-      // Process updates
       for (const item of toUpdate) {
         const { error } = await supabase.from('products').update(item.data as any).eq('id', item.id);
-        if (error) {
-          console.error('Update error:', error);
-          failCount++;
-        } else {
-          updatedCount++;
-        }
+        if (error) { failCount++; } else { updatedCount++; }
       }
 
-      // Process inserts in batches
       const batch = 20;
       for (let i = 0; i < toInsert.length; i += batch) {
         const chunk = toInsert.slice(i, i + batch);
         const { error } = await supabase.from('products').insert(chunk as any[]);
-        if (error) {
-          console.error('Insert batch error:', error);
-          failCount += chunk.length;
-        } else {
-          insertedCount += chunk.length;
-        }
+        if (error) { failCount += chunk.length; } else { insertedCount += chunk.length; }
       }
 
-      qc.invalidateQueries({ queryKey: ['admin', 'products'] });
+      invalidateProducts();
       const parts: string[] = [];
       if (insertedCount > 0) parts.push(`${insertedCount} importado(s)`);
       if (updatedCount > 0) parts.push(`${updatedCount} atualizado(s)`);
       if (parts.length > 0) toast.success(parts.join(', ') + '!');
       if (failCount > 0) toast.error(`${failCount} produto(s) falharam.`);
     } catch (err: any) {
-      console.error('Import error:', err);
       toast.error('Erro na importação: ' + (err.message || 'Tente novamente.'));
     } finally {
       setImporting(false);
@@ -441,7 +448,7 @@ const Products = () => {
             const ids = Array.from(selectedIds);
             const { error } = await supabase.from('products').update({ is_active: true }).in('id', ids);
             if (error) { toast.error('Erro ao ativar produtos'); return; }
-            qc.invalidateQueries({ queryKey: ['admin', 'products'] });
+            invalidateProducts();
             toast.success(`${ids.length} produto(s) ativado(s)!`);
             setSelectedIds(new Set());
           }}>
@@ -451,7 +458,7 @@ const Products = () => {
             const ids = Array.from(selectedIds);
             const { error } = await supabase.from('products').update({ is_active: false }).in('id', ids);
             if (error) { toast.error('Erro ao desativar produtos'); return; }
-            qc.invalidateQueries({ queryKey: ['admin', 'products'] });
+            invalidateProducts();
             toast.success(`${ids.length} produto(s) desativado(s)!`);
             setSelectedIds(new Set());
           }}>
@@ -469,14 +476,14 @@ const Products = () => {
         </div>
       )}
 
-      <div className="bg-card rounded-lg shadow-soft overflow-hidden">
+      <div className={`bg-card rounded-lg shadow-soft overflow-hidden transition-opacity ${isPlaceholderData ? 'opacity-70' : ''}`}>
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="border-b border-border bg-muted/50">
                 <th className="px-4 py-3 w-10">
                   <Checkbox
-                    checked={filtered.length > 0 && selectedIds.size === filtered.length}
+                    checked={rows.length > 0 && selectedIds.size === rows.length}
                     onCheckedChange={toggleAll}
                   />
                 </th>
@@ -490,11 +497,11 @@ const Products = () => {
               </tr>
             </thead>
             <tbody>
-              {isLoading ? (
-                <tr><td colSpan={8} className="px-4 py-8 text-center font-body text-sm text-muted-foreground">Carregando...</td></tr>
-              ) : filtered.length === 0 ? (
+              {isLoading && !data ? (
+                <SkeletonRows />
+              ) : rows.length === 0 ? (
                 <tr><td colSpan={8} className="px-4 py-8 text-center font-body text-sm text-muted-foreground">Nenhum produto encontrado.</td></tr>
-              ) : filtered.map(p => (
+              ) : rows.map(p => (
                 <tr key={p.id} className="border-b border-border hover:bg-muted/30 transition-colors">
                   <td className="px-4 py-3">
                     <Checkbox
@@ -511,7 +518,7 @@ const Products = () => {
                   <td className="px-4 py-3 font-body text-sm text-muted-foreground">{p.sku || '—'}</td>
                   <td className="px-4 py-3 font-body text-sm text-foreground">{formatCurrency(p.retail_price)}</td>
                   <td className="px-4 py-3 font-body text-sm text-foreground">{p.stock}</td>
-                  <td className="px-4 py-3 font-body text-sm text-muted-foreground">{p.variants.length} cores</td>
+                  <td className="px-4 py-3 font-body text-sm text-muted-foreground">{p.variants_count} cores</td>
                   <td className="px-4 py-3">
                     <button
                       onClick={() => toggleProduct.mutate({ id: p.id, is_active: !p.is_active })}
@@ -559,6 +566,23 @@ const Products = () => {
             </tbody>
           </table>
         </div>
+
+        {/* Pagination */}
+        {totalCount > PAGE_SIZE && (
+          <div className="flex items-center justify-between px-4 py-3 border-t border-border">
+            <span className="font-body text-sm text-muted-foreground">
+              Mostrando {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, totalCount)} de {totalCount}
+            </span>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage(p => p - 1)}>
+                <ChevronLeft className="w-4 h-4 mr-1" /> Anterior
+              </Button>
+              <Button variant="outline" size="sm" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>
+                Próximo <ChevronRight className="w-4 h-4 ml-1" />
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Import Preview Dialog */}

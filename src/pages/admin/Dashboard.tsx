@@ -4,13 +4,15 @@ import { useCollections } from '@/hooks/useProducts';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { Skeleton } from '@/components/ui/skeleton';
 
 const formatCurrency = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 const Dashboard = () => {
-  const { data: products } = useQuery({
+  const { data: products, isLoading: productsLoading } = useQuery({
     queryKey: ['admin', 'dashboard-products'],
     staleTime: 60_000,
+    placeholderData: (prev: any) => prev,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('products')
@@ -20,10 +22,11 @@ const Dashboard = () => {
       return data as Array<{ id: string; name: string; stock: number; is_active: boolean }>;
     },
   });
-  const { data: collections } = useCollections();
-  const { data: orders } = useQuery({
+  const { data: collections, isLoading: collectionsLoading } = useCollections();
+  const { data: orders, isLoading: ordersLoading } = useQuery({
     queryKey: ['admin', 'dashboard-orders'],
     staleTime: 30_000,
+    placeholderData: (prev: any) => prev,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('orders')
@@ -33,9 +36,10 @@ const Dashboard = () => {
       return data as Array<{ id: string; status: string; total: number; created_at: string }>;
     },
   });
-  const { data: customers } = useQuery({
+  const { data: customers, isLoading: customersLoading } = useQuery({
     queryKey: ['admin', 'customers-count'],
     staleTime: 60_000,
+    placeholderData: (prev: any) => prev,
     queryFn: async () => {
       const { count, error } = await supabase.from('customers').select('*', { count: 'exact', head: true });
       if (error) throw error;
@@ -103,15 +107,15 @@ const Dashboard = () => {
     }));
   }, [orders]);
 
-  const cards = [
-    { label: 'Faturamento', value: formatCurrency(metrics.revenue), icon: DollarSign, color: 'text-primary' },
-    { label: 'Pedidos', value: orders?.length ?? 0, icon: ShoppingCart, color: 'text-accent' },
-    { label: 'Ticket Médio', value: formatCurrency(metrics.avgTicket), icon: TrendingUp, color: 'text-primary' },
-    { label: 'Pendentes', value: metrics.pending, icon: Clock, color: 'text-destructive' },
-    { label: 'Hoje', value: metrics.today, icon: ShoppingCart, color: 'text-accent' },
-    { label: 'Produtos', value: products?.length ?? 0, icon: Package, color: 'text-primary' },
-    { label: 'Coleções', value: collections?.length ?? 0, icon: FolderOpen, color: 'text-muted-foreground' },
-    { label: 'Clientes', value: customers ?? 0, icon: Users, color: 'text-accent' },
+  const cardDefs = [
+    { label: 'Faturamento', value: formatCurrency(metrics.revenue), icon: DollarSign, color: 'text-primary', loading: ordersLoading },
+    { label: 'Pedidos', value: orders?.length ?? 0, icon: ShoppingCart, color: 'text-accent', loading: ordersLoading },
+    { label: 'Ticket Médio', value: formatCurrency(metrics.avgTicket), icon: TrendingUp, color: 'text-primary', loading: ordersLoading },
+    { label: 'Pendentes', value: metrics.pending, icon: Clock, color: 'text-destructive', loading: ordersLoading },
+    { label: 'Hoje', value: metrics.today, icon: ShoppingCart, color: 'text-accent', loading: ordersLoading },
+    { label: 'Produtos', value: products?.length ?? 0, icon: Package, color: 'text-primary', loading: productsLoading },
+    { label: 'Coleções', value: collections?.length ?? 0, icon: FolderOpen, color: 'text-muted-foreground', loading: collectionsLoading },
+    { label: 'Clientes', value: customers ?? 0, icon: Users, color: 'text-accent', loading: customersLoading },
   ];
 
   return (
@@ -120,12 +124,16 @@ const Dashboard = () => {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {cards.map(s => (
+        {cardDefs.map(s => (
           <div key={s.label} className="bg-card rounded-lg p-5 shadow-soft">
             <div className="flex items-center justify-between mb-3">
               <s.icon className={`w-5 h-5 ${s.color}`} />
             </div>
-            <p className="font-display text-2xl font-bold text-foreground">{s.value}</p>
+            {s.loading && !s.value ? (
+              <Skeleton className="h-8 w-24 mb-1" />
+            ) : (
+              <p className="font-display text-2xl font-bold text-foreground">{s.value}</p>
+            )}
             <p className="font-body text-xs text-muted-foreground">{s.label}</p>
           </div>
         ))}
@@ -136,22 +144,28 @@ const Dashboard = () => {
         {/* Revenue Chart */}
         <div className="lg:col-span-2 bg-card rounded-lg p-6 shadow-soft">
           <h2 className="font-body text-sm font-semibold text-foreground mb-4">Faturamento – Últimos 7 dias</h2>
-          <div className="h-56">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={revenueByDay}>
-                <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" tickFormatter={v => `R$${v}`} />
-                <Tooltip formatter={(v: number) => formatCurrency(v)} labelFormatter={l => `Dia ${l}`} />
-                <Bar dataKey="value" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+          {ordersLoading && !orders ? (
+            <Skeleton className="h-56 w-full rounded-lg" />
+          ) : (
+            <div className="h-56">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={revenueByDay}>
+                  <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
+                  <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" tickFormatter={v => `R$${v}`} />
+                  <Tooltip formatter={(v: number) => formatCurrency(v)} labelFormatter={l => `Dia ${l}`} />
+                  <Bar dataKey="value" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
         </div>
 
         {/* Status Pie */}
         <div className="bg-card rounded-lg p-6 shadow-soft">
           <h2 className="font-body text-sm font-semibold text-foreground mb-4">Pedidos por Status</h2>
-          {statusData.length === 0 ? (
+          {ordersLoading && !orders ? (
+            <Skeleton className="h-56 w-full rounded-lg" />
+          ) : statusData.length === 0 ? (
             <p className="font-body text-sm text-muted-foreground text-center py-8">Sem pedidos ainda.</p>
           ) : (
             <div className="h-56">
