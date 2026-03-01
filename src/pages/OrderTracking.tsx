@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Search, Package, Check, Truck, MapPin, Clock, XCircle, ChevronRight } from 'lucide-react';
 import Header from '@/components/Header';
@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { ORDER_STATUS_LABELS } from '@/hooks/useOrders';
 import { formatCurrency } from '@/data/products';
+import { toast } from 'sonner';
 
 interface TrackingOrder {
   order_number: number;
@@ -34,34 +35,40 @@ const STATUS_ICONS: Record<string, React.ReactNode> = {
 
 const OrderTracking = () => {
   const [query, setQuery] = useState('');
+  const [email, setEmail] = useState('');
+  const [cpfLast4, setCpfLast4] = useState('');
   const [order, setOrder] = useState<TrackingOrder | null>(null);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
 
   const handleSearch = async () => {
     const num = parseInt(query.replace(/\D/g, ''), 10);
+    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedCpfLast4 = cpfLast4.replace(/\D/g, '').slice(0, 4);
+
     if (!num) return;
+    if (!normalizedEmail && normalizedCpfLast4.length !== 4) {
+      toast.error('Informe e-mail ou os 4 ultimos digitos do CPF.');
+      return;
+    }
+
     setLoading(true);
     setSearched(true);
     try {
-      const { data: orderRow, error: oErr } = await supabase
-        .from('orders')
-        .select('id, order_number, status, total, payment_method, tracking_code, created_at, shipping_address')
-        .eq('order_number', num)
-        .single();
-      if (oErr || !orderRow) { setOrder(null); return; }
+      const payload: Record<string, string | number> = { order_number: num };
+      if (normalizedEmail) payload.email = normalizedEmail;
+      if (normalizedCpfLast4) payload.cpf_last4 = normalizedCpfLast4;
 
-      const [{ data: items }, { data: history }] = await Promise.all([
-        supabase.from('order_items').select('product_name, variant_name, quantity, unit_price').eq('order_id', orderRow.id),
-        supabase.from('order_status_history').select('to_status, created_at, note').eq('order_id', orderRow.id).order('created_at', { ascending: true }),
-      ]);
-
-      setOrder({
-        ...orderRow,
-        shipping_address: orderRow.shipping_address as Record<string, string> | null,
-        items: (items || []) as TrackingOrder['items'],
-        history: (history || []) as TrackingOrder['history'],
+      const { data, error } = await supabase.functions.invoke('order-tracking', {
+        body: payload,
       });
+
+      if (error || !data?.order) {
+        setOrder(null);
+        return;
+      }
+
+      setOrder(data.order as TrackingOrder);
     } catch {
       setOrder(null);
     } finally {
@@ -78,37 +85,49 @@ const OrderTracking = () => {
       <main className="container mx-auto px-4 py-12 md:py-20 max-w-2xl">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-10">
           <h1 className="font-display text-3xl md:text-4xl font-bold text-foreground mb-3">Rastreie seu Pedido</h1>
-          <p className="font-body text-muted-foreground">Digite o número do pedido para acompanhar o status da sua entrega.</p>
+          <p className="font-body text-muted-foreground">Informe o numero do pedido e um fator de validacao para consultar o status.</p>
         </motion.div>
 
-        {/* Search */}
-        <div className="flex gap-3 mb-10">
-          <div className="relative flex-1">
+        <div className="space-y-3 mb-10">
+          <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
-              placeholder="Número do pedido (ex: 1001)"
+              placeholder="Numero do pedido (ex: 1001)"
               value={query}
               onChange={e => setQuery(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleSearch()}
               className="pl-10 font-body"
             />
           </div>
-          <Button onClick={handleSearch} disabled={loading} className="bg-primary text-primary-foreground font-body">
-            {loading ? 'Buscando...' : 'Buscar'}
-          </Button>
+          <div className="grid gap-3 md:grid-cols-[1fr_220px_auto]">
+            <Input
+              placeholder="E-mail usado no pedido"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              className="font-body"
+            />
+            <Input
+              placeholder="ou CPF (4 ultimos)"
+              value={cpfLast4}
+              maxLength={4}
+              onChange={e => setCpfLast4(e.target.value.replace(/\D/g, '').slice(0, 4))}
+              className="font-body"
+            />
+            <Button onClick={handleSearch} disabled={loading} className="bg-primary text-primary-foreground font-body">
+              {loading ? 'Buscando...' : 'Buscar'}
+            </Button>
+          </div>
         </div>
 
-        {/* Results */}
         {searched && !order && !loading && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-12">
             <Package className="w-12 h-12 text-muted-foreground/40 mx-auto mb-4" />
-            <p className="font-body text-muted-foreground">Nenhum pedido encontrado com esse número.</p>
+            <p className="font-body text-muted-foreground">Nenhum pedido encontrado com os dados informados.</p>
           </motion.div>
         )}
 
         {order && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-            {/* Header card */}
             <div className="bg-card rounded-sm shadow-soft p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <p className="font-body text-xs text-muted-foreground uppercase tracking-wider">Pedido</p>
@@ -127,7 +146,6 @@ const OrderTracking = () => {
               </div>
             </div>
 
-            {/* Progress stepper */}
             {!isCancelled && (
               <div className="bg-card rounded-sm shadow-soft p-6">
                 <div className="flex items-center justify-between">
@@ -157,11 +175,10 @@ const OrderTracking = () => {
               </div>
             )}
 
-            {/* Tracking code */}
             {order.tracking_code && (
               <div className="bg-card rounded-sm shadow-soft p-6">
                 <h3 className="font-display text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
-                  <Truck className="w-4 h-4 text-primary" /> Código de Rastreio
+                  <Truck className="w-4 h-4 text-primary" /> Codigo de Rastreio
                 </h3>
                 <p className="font-body text-sm text-foreground bg-muted/50 rounded-md px-4 py-2 font-mono">
                   {order.tracking_code}
@@ -169,7 +186,6 @@ const OrderTracking = () => {
               </div>
             )}
 
-            {/* Items */}
             <div className="bg-card rounded-sm shadow-soft p-6">
               <h3 className="font-display text-sm font-semibold text-foreground mb-4">Itens do Pedido</h3>
               <div className="space-y-3">
@@ -186,10 +202,9 @@ const OrderTracking = () => {
               </div>
             </div>
 
-            {/* Timeline */}
             {order.history.length > 0 && (
               <div className="bg-card rounded-sm shadow-soft p-6">
-                <h3 className="font-display text-sm font-semibold text-foreground mb-4">Histórico</h3>
+                <h3 className="font-display text-sm font-semibold text-foreground mb-4">Historico</h3>
                 <div className="space-y-4">
                   {order.history.map((h, i) => (
                     <div key={i} className="flex gap-3">

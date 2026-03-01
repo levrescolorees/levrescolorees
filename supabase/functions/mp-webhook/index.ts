@@ -1,278 +1,307 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+﻿import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-signature, x-request-id, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
+};
+
+function generateRequestId(): string {
+  return crypto.randomUUID();
 }
 
-// ========== SECURITY UTILITIES ==========
-
-function generateRequestId(): string { return crypto.randomUUID() }
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      ...corsHeaders,
+      'Content-Type': 'application/json',
+    },
+  });
+}
 
 function slog(rid: string, level: 'info' | 'warn' | 'error', msg: string, extra?: Record<string, unknown>) {
-  const payload = { request_id: rid, level, msg, ...extra }
-  if (level === 'error') console.error(JSON.stringify(payload))
-  else console.log(JSON.stringify(payload))
+  const payload = { request_id: rid, level, msg, ...extra };
+  if (level === 'error') {
+    console.error(JSON.stringify(payload));
+    return;
+  }
+  console.log(JSON.stringify(payload));
 }
 
-async function constantTimeCompare(a: string, b: string): Promise<boolean> {
-  const encoder = new TextEncoder()
-  const key = await crypto.subtle.importKey('raw', encoder.encode('compare'), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
-  const sigA = await crypto.subtle.sign('HMAC', key, encoder.encode(a))
-  const sigB = await crypto.subtle.sign('HMAC', key, encoder.encode(b))
-  const viewA = new Uint8Array(sigA)
-  const viewB = new Uint8Array(sigB)
-  if (viewA.length !== viewB.length) return false
-  let result = 0
-  for (let i = 0; i < viewA.length; i++) result |= viewA[i] ^ viewB[i]
-  return result === 0
+async function timingSafeEquals(a: string, b: string): Promise<boolean> {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode('webhook-signature-compare'),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+
+  const sigA = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(a));
+  const sigB = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(b));
+  const bytesA = new Uint8Array(sigA);
+  const bytesB = new Uint8Array(sigB);
+
+  if (bytesA.length !== bytesB.length) return false;
+
+  let diff = 0;
+  for (let i = 0; i < bytesA.length; i++) {
+    diff |= bytesA[i] ^ bytesB[i];
+  }
+  return diff === 0;
+}
+
+async function verifyMpSignature(req: Request, dataId: string, webhookSecret: string): Promise<boolean> {
+  const xSignature = req.headers.get('x-signature') || '';
+  const xRequestId = req.headers.get('x-request-id') || '';
+  if (!xSignature || !webhookSecret) return false;
+
+  const parts: Record<string, string> = {};
+  for (const part of xSignature.split(',')) {
+    const [key, ...rest] = part.split('=');
+    if (key && rest.length) {
+      parts[key.trim()] = rest.join('=').trim();
+    }
+  }
+
+  const ts = parts.ts;
+  const v1 = parts.v1;
+  if (!ts || !v1) return false;
+
+  const tsNumber = Number(ts);
+  if (!Number.isFinite(tsNumber)) return false;
+
+  const ageMs = Date.now() - tsNumber * 1000;
+  if (ageMs > 5 * 60 * 1000 || ageMs < -60 * 1000) return false;
+
+  const manifest = `id:${dataId};request-id:${xRequestId};ts:${ts};`;
+
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(webhookSecret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(manifest));
+  const computed = Array.from(new Uint8Array(sig)).map(x => x.toString(16).padStart(2, '0')).join('');
+
+  return timingSafeEquals(computed, v1);
+}
+
+async function consumeRateLimit(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  identifier: string,
+  windowSeconds: number,
+  limit: number,
+): Promise<boolean> {
+  const { data, error } = await (supabaseAdmin as any).rpc('consume_rate_limit', {
+    p_identifier: identifier,
+    p_window_seconds: windowSeconds,
+    p_limit: limit,
+  });
+
+  if (error || !data) return true;
+  return !!data.allowed;
+}
+
+async function registerWebhookEvent(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  eventKey: string,
+): Promise<boolean> {
+  const { data, error } = await (supabaseAdmin as any).rpc('register_webhook_event', {
+    p_provider: 'mercadopago',
+    p_event_key: eventKey,
+  });
+
+  if (error) return false;
+  return !!data;
 }
 
 async function auditLog(
-  supabaseAdmin: any, action: string,
-  opts: { entity_type?: string; entity_id?: string; ip?: string; request_id?: string; details?: Record<string, unknown> }
+  supabaseAdmin: ReturnType<typeof createClient>,
+  action: string,
+  details: Record<string, unknown>,
+  requestId: string,
+  ip: string,
 ) {
   try {
     await supabaseAdmin.from('audit_logs').insert({
-      action, entity_type: opts.entity_type || null, entity_id: opts.entity_id || null,
-      ip_address: opts.ip || null, request_id: opts.request_id || null, details: opts.details || {},
-    })
-  } catch { /* never break flow */ }
-}
-
-// ========== RATE LIMITING ==========
-
-const webhookRateMap = new Map<string, { count: number; resetAt: number }>()
-function isWebhookRateLimited(ip: string): boolean {
-  const now = Date.now()
-  const entry = webhookRateMap.get(ip)
-  if (!entry || now > entry.resetAt) { webhookRateMap.set(ip, { count: 1, resetAt: now + 60_000 }); return false }
-  entry.count++
-  return entry.count > 100
-}
-
-// ========== HMAC SIGNATURE VERIFICATION ==========
-
-async function verifyMpSignature(
-  req: Request, dataId: string, webhookSecret: string
-): Promise<boolean> {
-  const xSignature = req.headers.get('x-signature')
-  const xRequestId = req.headers.get('x-request-id') || ''
-
-  if (!xSignature || !webhookSecret) return false
-
-  // Parse x-signature: "ts=1234567890,v1=abc123def..."
-  const parts: Record<string, string> = {}
-  for (const part of xSignature.split(',')) {
-    const [key, ...rest] = part.split('=')
-    if (key && rest.length) parts[key.trim()] = rest.join('=').trim()
+      action,
+      entity_type: 'webhook',
+      request_id: requestId,
+      ip_address: ip,
+      details,
+    });
+  } catch {
+    // no-op
   }
-
-  const ts = parts['ts']
-  const v1 = parts['v1']
-  if (!ts || !v1) return false
-
-  // Reject if timestamp is older than 5 minutes (replay protection)
-  const tsNum = parseInt(ts, 10)
-  if (isNaN(tsNum)) return false
-  const ageMs = Date.now() - tsNum * 1000
-  if (ageMs > 5 * 60 * 1000 || ageMs < -60 * 1000) return false
-
-  // Build manifest template per MP docs
-  const manifest = `id:${dataId};request-id:${xRequestId};ts:${ts};`
-
-  // Compute HMAC-SHA256
-  const encoder = new TextEncoder()
-  const key = await crypto.subtle.importKey(
-    'raw', encoder.encode(webhookSecret),
-    { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
-  )
-  const sig = await crypto.subtle.sign('HMAC', key, encoder.encode(manifest))
-  const computedHash = Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('')
-
-  return await constantTimeCompare(computedHash, v1)
 }
 
-// ========== HANDLER ==========
-
-Deno.serve(async (req) => {
+Deno.serve(async req => {
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders })
+    return new Response(null, { headers: corsHeaders });
   }
 
-  const rid = generateRequestId()
+  const rid = generateRequestId();
 
   try {
-    const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown'
+    const body = await req.json();
+    const paymentId = body?.data?.id ? String(body.data.id) : '';
 
-    // --- Rate limit ---
-    if (isWebhookRateLimited(clientIp)) {
-      slog(rid, 'warn', 'Webhook rate limited', { ip: clientIp })
-      return new Response(JSON.stringify({ error: 'Rate limited' }), {
-        status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
-    }
-
-    const body = await req.json()
-
-    if (body.type !== 'payment' && body.action !== 'payment.updated' && body.action !== 'payment.created') {
-      return new Response(JSON.stringify({ received: true }), {
-        status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
-    }
-
-    const paymentId = body.data?.id
     if (!paymentId) {
-      slog(rid, 'warn', 'No payment ID in webhook body')
-      return new Response(JSON.stringify({ error: 'No payment ID' }), {
-        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      return jsonResponse({ error: 'No payment ID' }, 400);
+    }
+
+    if (body?.type !== 'payment' && body?.action !== 'payment.updated' && body?.action !== 'payment.created') {
+      return jsonResponse({ received: true }, 200);
     }
 
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
-    )
+    );
 
-    // --- Get MP config + webhook secret ---
-    let mpToken = ''
-    let webhookSecret = ''
-    const { data: mpSettings } = await supabaseAdmin
-      .from('store_settings').select('value').eq('key', 'mercado_pago').single()
-    if (mpSettings?.value) {
-      const v = mpSettings.value as any
-      mpToken = v.access_token || ''
-      webhookSecret = v.webhook_secret || ''
+    const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+    const rateAllowed = await consumeRateLimit(supabaseAdmin, `mp-webhook:ip:${clientIp}`, 60, 120);
+    if (!rateAllowed) {
+      slog(rid, 'warn', 'Webhook rate limited', { ip: clientIp });
+      return jsonResponse({ error: 'Rate limited' }, 429);
     }
-    if (!mpToken) mpToken = Deno.env.get('MERCADO_PAGO_ACCESS_TOKEN') || ''
 
-    // --- Validate HMAC signature (if secret configured) ---
+    const { data: mpSettings } = await supabaseAdmin
+      .from('store_settings')
+      .select('value')
+      .eq('key', 'mercado_pago')
+      .single();
+
+    const mpValue = (mpSettings?.value || {}) as any;
+    const mpEnvironment = String(mpValue.environment || Deno.env.get('MERCADO_PAGO_ENVIRONMENT') || 'sandbox').toLowerCase();
+    const webhookSecret = String(mpValue.webhook_secret || Deno.env.get('MERCADO_PAGO_WEBHOOK_SECRET') || '');
+    const mpToken = String(mpValue.access_token || Deno.env.get('MERCADO_PAGO_ACCESS_TOKEN') || '');
+
+    const signatureRequired = mpEnvironment === 'production';
+    if (signatureRequired && !webhookSecret) {
+      slog(rid, 'error', 'Missing webhook secret in production');
+      return jsonResponse({ error: 'Webhook secret not configured' }, 500);
+    }
+
     if (webhookSecret) {
-      const valid = await verifyMpSignature(req, String(paymentId), webhookSecret)
+      const valid = await verifyMpSignature(req, paymentId, webhookSecret);
       if (!valid) {
-        slog(rid, 'error', 'Invalid webhook signature', { ip: clientIp, payment_id: paymentId })
         await auditLog(supabaseAdmin, 'webhook_invalid_signature', {
-          entity_type: 'webhook', entity_id: String(paymentId),
-          ip: clientIp, request_id: rid,
-          details: { payment_id: paymentId },
-        })
-        return new Response(JSON.stringify({ error: 'Invalid signature' }), {
-          status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        })
+          payment_id: paymentId,
+        }, rid, clientIp);
+        return jsonResponse({ error: 'Invalid signature' }, 401);
       }
-      slog(rid, 'info', 'Webhook signature verified', { payment_id: paymentId })
-    } else {
-      slog(rid, 'warn', 'No webhook_secret configured, skipping signature check', { payment_id: paymentId })
+    } else if (signatureRequired) {
+      return jsonResponse({ error: 'Invalid signature' }, 401);
+    }
+
+    const rawEventKey = `raw:${paymentId}:${body?.action || body?.type || 'unknown'}:${req.headers.get('x-request-id') || 'no-request-id'}`;
+    const rawEventAccepted = await registerWebhookEvent(supabaseAdmin, rawEventKey);
+    if (!rawEventAccepted) {
+      return jsonResponse({ received: true, duplicate: true }, 200);
     }
 
     if (!mpToken) {
-      slog(rid, 'error', 'No MP access_token configured')
-      return new Response(JSON.stringify({ error: 'Gateway not configured' }), {
-        status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      slog(rid, 'error', 'No MP access token configured');
+      return jsonResponse({ error: 'Gateway not configured' }, 500);
     }
 
-    // --- Fetch payment from MP API ---
     const mpRes = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
-      headers: { 'Authorization': `Bearer ${mpToken}` },
-    })
-    const mpData = await mpRes.json()
+      headers: {
+        Authorization: `Bearer ${mpToken}`,
+      },
+    });
 
+    const mpData = await mpRes.json();
     if (!mpRes.ok) {
-      slog(rid, 'error', 'Failed to fetch MP payment', { payment_id: paymentId, mp_error: mpData.message })
-      return new Response(JSON.stringify({ error: 'Failed to verify payment' }), {
-        status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      slog(rid, 'error', 'Failed to fetch MP payment', { payment_id: paymentId, mp_error: mpData?.message });
+      return jsonResponse({ error: 'Failed to verify payment' }, 500);
     }
 
-    // --- Validate external_reference ---
-    const orderId = mpData.external_reference || mpData.metadata?.order_id
+    const statusKey = `status:${paymentId}:${String(mpData.status || 'unknown')}`;
+    const statusAccepted = await registerWebhookEvent(supabaseAdmin, statusKey);
+    if (!statusAccepted) {
+      return jsonResponse({ received: true, duplicate: true }, 200);
+    }
+
+    const orderId = String(mpData.external_reference || mpData.metadata?.order_id || '');
     if (!orderId) {
-      slog(rid, 'error', 'No order reference in payment', { payment_id: paymentId })
-      return new Response(JSON.stringify({ error: 'No order reference' }), {
-        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      return jsonResponse({ error: 'No order reference' }, 400);
     }
 
-    const { data: order, error: oErr } = await supabaseAdmin
+    const { data: order, error: orderError } = await supabaseAdmin
       .from('orders')
-      .select('id, total, status, payment_status')
+      .select('id, status, payment_status, total')
       .eq('id', orderId)
-      .single()
+      .maybeSingle();
 
-    if (oErr || !order) {
-      slog(rid, 'error', 'Order not found', { order_id: orderId })
-      return new Response(JSON.stringify({ error: 'Order not found' }), {
-        status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+    if (orderError || !order) {
+      return jsonResponse({ error: 'Order not found' }, 404);
     }
 
-    // --- Validate currency ---
     if (mpData.currency_id && mpData.currency_id !== 'BRL') {
-      slog(rid, 'error', 'Invalid currency', { currency: mpData.currency_id, order_id: orderId })
       await auditLog(supabaseAdmin, 'webhook_invalid_currency', {
-        entity_type: 'order', entity_id: orderId, request_id: rid,
-        details: { expected: 'BRL', received: mpData.currency_id },
-      })
-      return new Response(JSON.stringify({ error: 'Invalid currency' }), {
-        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+        order_id: orderId,
+        expected: 'BRL',
+        received: mpData.currency_id,
+      }, rid, clientIp);
+      return jsonResponse({ error: 'Invalid currency' }, 400);
     }
 
-    // --- Validate amount (tolerance R$ 0.05) ---
-    if (mpData.transaction_amount && Math.abs(mpData.transaction_amount - Number(order.total)) > 0.05) {
-      slog(rid, 'error', 'Amount mismatch', {
-        order_id: orderId, expected: order.total, received: mpData.transaction_amount,
-      })
+    if (mpData.transaction_amount && Math.abs(Number(mpData.transaction_amount) - Number(order.total)) > 0.05) {
       await auditLog(supabaseAdmin, 'webhook_amount_mismatch', {
-        entity_type: 'order', entity_id: orderId, request_id: rid,
-        details: { expected: Number(order.total), received: mpData.transaction_amount },
-      })
-      // Don't block — just log. MP may include fees.
+        order_id: orderId,
+        expected: Number(order.total),
+        received: Number(mpData.transaction_amount),
+      }, rid, clientIp);
     }
 
-    // --- Map statuses ---
     const statusMap: Record<string, { payment: string; order: string | null }> = {
-      'approved': { payment: 'approved', order: 'confirmado' },
-      'rejected': { payment: 'rejected', order: 'cancelado' },
-      'cancelled': { payment: 'cancelled', order: 'cancelado' },
-      'refunded': { payment: 'refunded', order: 'cancelado' },
-      'charged_back': { payment: 'refunded', order: 'cancelado' },
-      'pending': { payment: 'pending', order: null },
-      'in_process': { payment: 'pending', order: null },
-      'authorized': { payment: 'pending', order: null },
-    }
+      approved: { payment: 'approved', order: 'confirmado' },
+      rejected: { payment: 'rejected', order: 'cancelado' },
+      cancelled: { payment: 'cancelled', order: 'cancelado' },
+      refunded: { payment: 'refunded', order: 'cancelado' },
+      charged_back: { payment: 'refunded', order: 'cancelado' },
+      pending: { payment: 'pending', order: null },
+      in_process: { payment: 'pending', order: null },
+      authorized: { payment: 'pending', order: null },
+    };
 
-    const mapped = statusMap[mpData.status] || { payment: mpData.status, order: null }
+    const mapped = statusMap[String(mpData.status || '').toLowerCase()] || {
+      payment: String(mpData.status || 'pending').toLowerCase(),
+      order: null,
+    };
 
-    const update: any = {
+    const updatePayload: Record<string, unknown> = {
       payment_status: mapped.payment,
       payment_details: mpData,
       payment_id: String(mpData.id),
-    }
+    };
 
     if (mapped.order && mapped.order !== order.status) {
-      update.status = mapped.order
+      updatePayload.status = mapped.order;
       await supabaseAdmin.from('order_status_history').insert({
-        order_id: orderId, from_status: order.status, to_status: mapped.order,
+        order_id: orderId,
+        from_status: order.status,
+        to_status: mapped.order,
         note: `Webhook MP: ${mpData.status} (payment ${mpData.id})`,
-      })
+      });
     }
 
-    await supabaseAdmin.from('orders').update(update).eq('id', orderId)
+    await supabaseAdmin.from('orders').update(updatePayload).eq('id', orderId);
 
     slog(rid, 'info', 'Webhook processed', {
-      order_id: orderId, mp_status: mpData.status, payment_status: mapped.payment,
-    })
+      order_id: orderId,
+      payment_id: paymentId,
+      mp_status: mpData.status,
+    });
 
-    return new Response(JSON.stringify({ received: true }), {
-      status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    })
-
-  } catch (err) {
-    slog(rid, 'error', 'Webhook unhandled error', { error: String(err) })
-    return new Response(JSON.stringify({ error: 'Internal error' }), {
-      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    })
+    return jsonResponse({ received: true }, 200);
+  } catch (error) {
+    slog(rid, 'error', 'Unhandled webhook error', { error: String(error) });
+    return jsonResponse({ error: 'Internal error' }, 500);
   }
-})
+});
