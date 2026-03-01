@@ -255,21 +255,22 @@ const Checkout = () => {
     if (!form.couponCode.trim()) return;
     setCouponLoading(true);
     try {
-      const { data, error } = await supabase.rpc('validate_coupon', {
+      const { data, error } = await supabase.rpc('validate_coupon' as any, {
         p_code: form.couponCode.toUpperCase().trim(),
         p_subtotal: totalSmart,
       });
-      if (error || !data?.valid) {
-        toast.error(data?.message || 'Cupom invalido ou expirado.');
+      const result = data as any;
+      if (error || !result?.valid) {
+        toast.error(result?.message || 'Cupom invalido ou expirado.');
         setAppliedCoupon(null);
         return;
       }
       setAppliedCoupon({
-        code: data.code,
-        discount_type: data.discount_type,
-        discount_value: data.discount_value,
+        code: result.code,
+        discount_type: result.discount_type,
+        discount_value: result.discount_value,
       });
-      toast.success(`Cupom "${data.code}" aplicado!`);
+      toast.success(`Cupom "${result.code}" aplicado!`);
     } finally {
       setCouponLoading(false);
     }
