@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
+import { isValidCPF, isValidCNPJ } from '@/lib/validators';
 import { useCart } from '@/context/CartContext';
 import { getSmartPrice, formatCurrency } from '@/data/products';
 import { useShippingRules, useStoreSettings } from '@/hooks/useStoreSettings';
@@ -95,6 +96,12 @@ const Checkout = () => {
     setForm(prev => ({ ...prev, [field]: value }));
   }, []);
 
+  // Touched state for inline validation feedback
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const markTouched = useCallback((field: string) => {
+    setTouched(prev => ({ ...prev, [field]: true }));
+  }, []);
+
   // ViaCEP with debounce
   useEffect(() => {
     const raw = form.zip.replace(/\D/g, '');
@@ -167,7 +174,9 @@ const Checkout = () => {
   };
 
   // Step validation
-  const isStep1Valid = form.name && form.email && form.phone && form.cpf.replace(/\D/g, '').length === 11;
+  const cpfValid = isValidCPF(form.cpf);
+  const cnpjValid = isValidCNPJ(form.cnpj);
+  const isStep1Valid = form.name && form.email && form.phone && cpfValid && (!form.isWholesale || cnpjValid);
   const isStep2Valid = form.zip.replace(/\D/g, '').length === 8 && form.street && form.number && form.city && form.state;
 
   const canProceed = (s: number) => {
@@ -428,7 +437,10 @@ const Checkout = () => {
                     <Input placeholder="Nome completo *" value={form.name} onChange={e => set('name', e.target.value)} className="font-body" />
                     <Input placeholder="E-mail *" type="email" value={form.email} onChange={e => set('email', e.target.value)} className="font-body" />
                     <Input placeholder="Telefone *" value={form.phone} onChange={e => set('phone', maskPhone(e.target.value))} className="font-body" />
-                    <Input placeholder="CPF *" value={form.cpf} onChange={e => set('cpf', maskCPF(e.target.value))} className="font-body" />
+                    <div>
+                      <Input placeholder="CPF *" value={form.cpf} onChange={e => set('cpf', maskCPF(e.target.value))} onBlur={() => markTouched('cpf')} className={`font-body ${touched.cpf && !cpfValid ? 'border-destructive' : ''}`} />
+                      {touched.cpf && !cpfValid && <p className="text-xs text-destructive mt-1 font-body">CPF inválido</p>}
+                    </div>
                   </div>
 
                   <button onClick={() => set('isWholesale', !form.isWholesale)}
@@ -441,7 +453,10 @@ const Checkout = () => {
 
                   {form.isWholesale && (
                     <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <Input placeholder="CNPJ" value={form.cnpj} onChange={e => set('cnpj', maskCNPJ(e.target.value))} className="font-body" />
+                      <div>
+                        <Input placeholder="CNPJ *" value={form.cnpj} onChange={e => set('cnpj', maskCNPJ(e.target.value))} onBlur={() => markTouched('cnpj')} className={`font-body ${touched.cnpj && !cnpjValid ? 'border-destructive' : ''}`} />
+                        {touched.cnpj && !cnpjValid && <p className="text-xs text-destructive mt-1 font-body">CNPJ inválido</p>}
+                      </div>
                       <Input placeholder="Razão Social" value={form.companyName} onChange={e => set('companyName', e.target.value)} className="font-body" />
                     </motion.div>
                   )}
