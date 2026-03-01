@@ -62,7 +62,7 @@ export interface DBCollection {
 export function useStorefrontProducts() {
   return useQuery({
     queryKey: ['products', 'storefront'],
-    staleTime: 60_000,
+    staleTime: 5 * 60_000,
     queryFn: async () => {
       const { data: products, error } = await supabase
         .from('products')
@@ -124,7 +124,7 @@ export function useProductBySlug(slug: string | undefined) {
 export function useCollections() {
   return useQuery({
     queryKey: ['collections'],
-    staleTime: 60_000,
+    staleTime: 5 * 60_000,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('collections')
@@ -138,6 +138,55 @@ export function useCollections() {
 }
 
 // ---- Admin queries ----
+
+export interface AdminProductRow {
+  id: string;
+  name: string;
+  slug: string;
+  sku: string | null;
+  retail_price: number;
+  stock: number;
+  is_active: boolean;
+  badge: string | null;
+  status: string;
+  updated_at: string;
+  thumbnail: string | null;
+  variants_count: number;
+  price_rules_count: number;
+  collections: Array<{ id: string; name: string }>;
+  total_count: number;
+}
+
+export function useAdminProductsList(
+  search: string,
+  collectionId: string | null,
+  page: number,
+  pageSize = 25
+) {
+  return useQuery({
+    queryKey: ['admin', 'products-list', search, collectionId, page, pageSize],
+    staleTime: 60_000,
+    placeholderData: (prev: any) => prev,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('admin_products_list', {
+        p_search: search,
+        p_collection_id: collectionId || null,
+        p_limit: pageSize,
+        p_offset: page * pageSize,
+      });
+      if (error) throw error;
+      const rows = (data as any[]) || [];
+      const totalCount = rows.length > 0 ? Number(rows[0].total_count) : 0;
+      return {
+        rows: rows.map((r: any) => ({
+          ...r,
+          collections: r.collections || [],
+        })) as AdminProductRow[],
+        totalCount,
+      };
+    },
+  });
+}
 
 export function useAdminProducts() {
   return useQuery({

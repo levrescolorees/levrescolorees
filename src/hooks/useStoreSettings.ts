@@ -25,7 +25,7 @@ export function useStoreSettings() {
       data.forEach((r: any) => { map[r.key] = r.value; });
       return map as { brand?: BrandSettings; hero?: HeroSettings; [key: string]: any };
     },
-    staleTime: 60_000,
+    staleTime: 10 * 60_000,
   });
 }
 

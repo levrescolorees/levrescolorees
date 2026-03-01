@@ -1,9 +1,9 @@
 import { Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
 import { Star, ShoppingBag, ImageIcon } from 'lucide-react';
 import { formatCurrency, getSmartPriceFromRules } from '@/hooks/useProducts';
 import type { DBProduct, DBPriceRule, DBVariant } from '@/hooks/useProducts';
 import { useCart } from '@/context/CartContext';
+import { useAnimateOnView } from '@/hooks/useAnimateOnView';
 
 interface ProductCardProps {
   product: DBProduct & { variants: DBVariant[]; priceRules: DBPriceRule[] };
@@ -13,10 +13,10 @@ interface ProductCardProps {
 const ProductCard = ({ product, index = 0 }: ProductCardProps) => {
   const { addItem } = useCart();
   const box12 = getSmartPriceFromRules(product.retail_price, product.priceRules, 12);
+  const { ref, className: animClass } = useAnimateOnView(index * 100);
 
   const handleAddToCart = (e: React.MouseEvent) => {
     e.preventDefault();
-    // Build legacy Product shape for cart compatibility
     const legacyProduct = {
       id: product.id,
       name: product.name,
@@ -41,12 +41,9 @@ const ProductCard = ({ product, index = 0 }: ProductCardProps) => {
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true }}
-      transition={{ delay: index * 0.1, duration: 0.5 }}
-      className="group"
+    <div
+      ref={ref}
+      className={`group transition-all duration-500 ease-out ${animClass}`}
     >
       <Link to={`/produto/${product.slug}`} className="block">
         <div className="relative overflow-hidden rounded-sm bg-secondary aspect-[3/4] mb-4">
@@ -72,14 +69,12 @@ const ProductCard = ({ product, index = 0 }: ProductCardProps) => {
               Ideal Revenda
             </span>
           )}
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
+          <button
             onClick={handleAddToCart}
-            className="absolute bottom-3 right-3 bg-background/90 backdrop-blur-sm text-foreground p-3 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-soft"
+            className="absolute bottom-3 right-3 bg-background/90 backdrop-blur-sm text-foreground p-3 rounded-full opacity-0 group-hover:opacity-100 transition-all hover:scale-105 active:scale-95 shadow-soft"
           >
             <ShoppingBag className="w-4 h-4" />
-          </motion.button>
+          </button>
         </div>
 
         <div className="space-y-1.5">
@@ -102,7 +97,7 @@ const ProductCard = ({ product, index = 0 }: ProductCardProps) => {
           </div>
         </div>
       </Link>
-    </motion.div>
+    </div>
   );
 };
 

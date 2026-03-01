@@ -1,5 +1,5 @@
-import { motion } from 'framer-motion';
 import { Package, Sparkles, Crown } from 'lucide-react';
+import { useAnimateOnView } from '@/hooks/useAnimateOnView';
 
 const tiers = [
   {
@@ -31,6 +31,54 @@ const tiers = [
   },
 ];
 
+const TierCard = ({ tier, delay }: { tier: typeof tiers[0]; delay: number }) => {
+  const { ref, className } = useAnimateOnView(delay);
+  return (
+    <div
+      ref={ref}
+      className={`relative rounded-sm p-6 text-center transition-all duration-500 ease-out ${className} ${
+        tier.highlight
+          ? 'bg-gradient-rose text-primary-foreground shadow-rose scale-[1.03]'
+          : 'bg-card shadow-soft'
+      }`}
+    >
+      {tier.highlight && (
+        <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gold text-charcoal text-[10px] font-body font-bold tracking-wider uppercase px-4 py-1 rounded-full">
+          Mais Popular
+        </span>
+      )}
+      <div
+        className={`inline-flex items-center justify-center w-14 h-14 rounded-full mb-4 ${
+          tier.highlight ? 'bg-primary-foreground/20' : 'bg-secondary'
+        }`}
+      >
+        <tier.icon className={`w-6 h-6 ${tier.highlight ? 'text-primary-foreground' : 'text-primary'}`} />
+      </div>
+      <div
+        className={`inline-block text-xs font-body font-bold tracking-wider uppercase px-3 py-1 rounded-full mb-3 ${
+          tier.highlight ? 'bg-primary-foreground/20 text-primary-foreground' : tier.accent
+        }`}
+      >
+        {tier.label}
+      </div>
+      <h3
+        className={`font-display text-2xl font-bold mb-2 ${
+          tier.highlight ? 'text-primary-foreground' : 'text-foreground'
+        }`}
+      >
+        {tier.qty}
+      </h3>
+      <p
+        className={`text-sm font-body ${
+          tier.highlight ? 'text-primary-foreground/80' : 'text-muted-foreground'
+        }`}
+      >
+        {tier.desc}
+      </p>
+    </div>
+  );
+};
+
 const SmartPricingSection = () => (
   <section className="py-16 md:py-24 bg-background">
     <div className="container mx-auto px-4">
@@ -48,52 +96,7 @@ const SmartPricingSection = () => (
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
         {tiers.map((tier, i) => (
-          <motion.div
-            key={tier.label}
-            initial={{ opacity: 0, y: 25 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ delay: i * 0.15, duration: 0.5 }}
-            className={`relative rounded-sm p-6 text-center transition-all ${
-              tier.highlight
-                ? 'bg-gradient-rose text-primary-foreground shadow-rose scale-[1.03]'
-                : 'bg-card shadow-soft'
-            }`}
-          >
-            {tier.highlight && (
-              <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gold text-charcoal text-[10px] font-body font-bold tracking-wider uppercase px-4 py-1 rounded-full">
-                Mais Popular
-              </span>
-            )}
-            <div
-              className={`inline-flex items-center justify-center w-14 h-14 rounded-full mb-4 ${
-                tier.highlight ? 'bg-primary-foreground/20' : 'bg-secondary'
-              }`}
-            >
-              <tier.icon className={`w-6 h-6 ${tier.highlight ? 'text-primary-foreground' : 'text-primary'}`} />
-            </div>
-            <div
-              className={`inline-block text-xs font-body font-bold tracking-wider uppercase px-3 py-1 rounded-full mb-3 ${
-                tier.highlight ? 'bg-primary-foreground/20 text-primary-foreground' : tier.accent
-              }`}
-            >
-              {tier.label}
-            </div>
-            <h3
-              className={`font-display text-2xl font-bold mb-2 ${
-                tier.highlight ? 'text-primary-foreground' : 'text-foreground'
-              }`}
-            >
-              {tier.qty}
-            </h3>
-            <p
-              className={`text-sm font-body ${
-                tier.highlight ? 'text-primary-foreground/80' : 'text-muted-foreground'
-              }`}
-            >
-              {tier.desc}
-            </p>
-          </motion.div>
+          <TierCard key={tier.label} tier={tier} delay={i * 150} />
         ))}
       </div>
 
