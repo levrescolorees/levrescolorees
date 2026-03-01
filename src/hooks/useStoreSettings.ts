@@ -15,17 +15,48 @@ export interface HeroSettings {
 
 // Theme interfaces moved to src/theme/defaultTheme.ts
 
+export interface PublicMercadoPagoSettings {
+  public_key?: string;
+  enabled?: boolean;
+  pix_enabled?: boolean;
+  card_enabled?: boolean;
+  boleto_enabled?: boolean;
+  max_installments?: number;
+  environment?: 'sandbox' | 'production';
+}
+
+export type PublicStoreSettings = {
+  brand?: BrandSettings;
+  hero?: HeroSettings;
+  mercado_pago?: PublicMercadoPagoSettings;
+  [key: string]: unknown;
+};
+
 export function useStoreSettings() {
   return useQuery({
     queryKey: ['store_settings'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('store_settings').select('*');
+      const { data, error } = await supabase.rpc('get_public_store_settings');
       if (error) throw error;
-      const map: Record<string, any> = {};
-      data.forEach((r: any) => { map[r.key] = r.value; });
-      return map as { brand?: BrandSettings; hero?: HeroSettings; [key: string]: any };
+      return (data || {}) as PublicStoreSettings;
     },
     staleTime: 10 * 60_000,
+  });
+}
+
+export function useAdminStoreSettings() {
+  return useQuery({
+    queryKey: ['store_settings_admin'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('store_settings').select('*');
+      if (error) throw error;
+      const map: Record<string, unknown> = {};
+      data.forEach((row) => {
+        map[row.key] = row.value;
+      });
+      return map as PublicStoreSettings;
+    },
+    staleTime: 60_000,
   });
 }
 

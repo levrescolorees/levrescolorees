@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+﻿import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -18,6 +18,25 @@ import { toast } from 'sonner';
 
 type PaymentMethod = 'pix' | 'card' | 'boleto';
 
+type MercadoPagoCardTokenResult = { id?: string; error?: unknown };
+type MercadoPagoClient = {
+  createCardToken: (payload: {
+    cardNumber: string;
+    cardholderName: string;
+    cardExpirationMonth: string;
+    cardExpirationYear: string;
+    securityCode: string;
+    identificationType: 'CPF';
+    identificationNumber: string;
+  }) => Promise<MercadoPagoCardTokenResult>;
+};
+
+declare global {
+  interface Window {
+    MercadoPago?: new (publicKey: string, options?: { locale?: string }) => MercadoPagoClient;
+  }
+}
+
 interface CheckoutForm {
   name: string; email: string; phone: string; cpf: string;
   cnpj: string; companyName: string; isWholesale: boolean;
@@ -27,9 +46,48 @@ interface CheckoutForm {
   couponCode: string;
 }
 
+interface CardForm {
+  cardNumber: string;
+  cardholderName: string;
+  cardExpiration: string;
+  securityCode: string;
+  installments: number;
+}
+
+interface MercadoPagoConfig {
+  public_key?: string;
+  card_enabled?: boolean;
+  pix_enabled?: boolean;
+  boleto_enabled?: boolean;
+  max_installments?: number;
+}
+
+interface PaymentResult {
+  order_id: string;
+  order_number: number;
+  payment_status: string;
+  payment_method: PaymentMethod;
+  total: number;
+  tracking_token?: string | null;
+  message?: string;
+  pix?: {
+    qr_code?: string;
+    qr_code_base64?: string;
+  };
+  boleto?: {
+    barcode?: string;
+    external_resource_url?: string;
+  };
+  card?: {
+    last_four?: string;
+    installments?: number;
+    installment_amount?: number;
+  };
+}
+
 const STEPS = [
   { id: 1, label: 'Dados', icon: User },
-  { id: 2, label: 'Endereço', icon: MapPin },
+  { id: 2, label: 'EndereÃ§o', icon: MapPin },
   { id: 3, label: 'Entrega', icon: Truck },
   { id: 4, label: 'Pagamento', icon: Wallet },
 ];
@@ -63,7 +121,7 @@ const Checkout = () => {
   const { data: storeSettings } = useStoreSettings();
 
   // MP config from store_settings
-  const mpConfig = storeSettings?.mercado_pago as any;
+  const mpConfig = (storeSettings?.mercado_pago || {}) as MercadoPagoConfig;
   const mpPublicKey = mpConfig?.public_key || '';
   const mpCardEnabled = mpConfig?.card_enabled ?? true;
   const mpPixEnabled = mpConfig?.pix_enabled ?? true;
@@ -73,8 +131,17 @@ const Checkout = () => {
   const [step, setStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
-  const [paymentResult, setPaymentResult] = useState<any>(null);
+  const [paymentResult, setPaymentResult] = useState<PaymentResult | null>(null);
   const [cepLoading, setCepLoading] = useState(false);
+  const [mpSdkReady, setMpSdkReady] = useState(false);
+  const [trackingToken, setTrackingToken] = useState<string | null>(null);
+  const [cardForm, setCardForm] = useState<CardForm>({
+    cardNumber: '',
+    cardholderName: '',
+    cardExpiration: '',
+    securityCode: '',
+    installments: 1,
+  });
 
   // Coupon
   const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; discount_type: string; discount_value: number } | null>(null);
@@ -91,8 +158,12 @@ const Checkout = () => {
     payment: 'pix', couponCode: '',
   });
 
-  const set = useCallback((field: keyof CheckoutForm, value: any) => {
+  const set = useCallback((field: keyof CheckoutForm, value: CheckoutForm[keyof CheckoutForm]) => {
     setForm(prev => ({ ...prev, [field]: value }));
+  }, []);
+
+  const setCardField = useCallback((field: keyof CardForm, value: string | number) => {
+    setCardForm(prev => ({ ...prev, [field]: value }));
   }, []);
 
   // ViaCEP with debounce
@@ -113,7 +184,7 @@ const Checkout = () => {
               state: data.uf || prev.state,
             }));
           } else {
-            toast.error('CEP não encontrado');
+            toast.error('CEP nÃ£o encontrado');
           }
         })
         .catch(() => toast.error('Erro ao buscar CEP'))
@@ -121,6 +192,32 @@ const Checkout = () => {
     }, 500);
     return () => clearTimeout(timer);
   }, [form.zip]);
+
+  useEffect(() => {
+    if (!mpPublicKey) {
+      setMpSdkReady(false);
+      return;
+    }
+    if (window.MercadoPago) {
+      setMpSdkReady(true);
+      return;
+    }
+
+    const existing = document.querySelector<HTMLScriptElement>('script[data-mp-sdk="true"]');
+    if (existing) {
+      existing.addEventListener('load', () => setMpSdkReady(true), { once: true });
+      existing.addEventListener('error', () => setMpSdkReady(false), { once: true });
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = 'https://sdk.mercadopago.com/js/v2';
+    script.async = true;
+    script.setAttribute('data-mp-sdk', 'true');
+    script.onload = () => setMpSdkReady(true);
+    script.onerror = () => setMpSdkReady(false);
+    document.head.appendChild(script);
+  }, [mpPublicKey]);
 
   // Shipping calculation
   const shipping = useMemo(() => {
@@ -151,19 +248,24 @@ const Checkout = () => {
     if (!form.couponCode.trim()) return;
     setCouponLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('coupons').select('*')
-        .eq('code', form.couponCode.toUpperCase().trim())
-        .eq('is_active', true).single();
-      if (error || !data) { toast.error('Cupom inválido ou expirado.'); setAppliedCoupon(null); return; }
-      if (data.expires_at && new Date(data.expires_at) < new Date()) { toast.error('Cupom expirado.'); return; }
-      if (data.max_uses && data.used_count >= data.max_uses) { toast.error('Cupom esgotado.'); return; }
-      if (data.min_order_value > 0 && totalSmart < data.min_order_value) {
-        toast.error(`Pedido mínimo de ${formatCurrency(data.min_order_value)} para este cupom.`); return;
+      const { data, error } = await supabase.rpc('validate_coupon', {
+        p_code: form.couponCode.toUpperCase().trim(),
+        p_subtotal: totalSmart,
+      });
+      if (error || !data?.valid) {
+        toast.error(data?.message || 'Cupom invalido ou expirado.');
+        setAppliedCoupon(null);
+        return;
       }
-      setAppliedCoupon({ code: data.code, discount_type: data.discount_type, discount_value: data.discount_value });
+      setAppliedCoupon({
+        code: data.code,
+        discount_type: data.discount_type,
+        discount_value: data.discount_value,
+      });
       toast.success(`Cupom "${data.code}" aplicado!`);
-    } finally { setCouponLoading(false); }
+    } finally {
+      setCouponLoading(false);
+    }
   };
 
   // Step validation
@@ -176,25 +278,68 @@ const Checkout = () => {
     return true;
   };
 
+  const tokenizeCard = useCallback(async () => {
+    if (!mpPublicKey) {
+      throw new Error('Public key do Mercado Pago nao configurada.');
+    }
+    if (!mpSdkReady || !window.MercadoPago) {
+      throw new Error('SDK de cartao indisponivel. Atualize a pagina e tente novamente.');
+    }
+
+    const cleanCardNumber = cardForm.cardNumber.replace(/\D/g, '');
+    const cleanSecurityCode = cardForm.securityCode.replace(/\D/g, '');
+    const expiration = cardForm.cardExpiration.replace(/\s/g, '');
+    const [monthRaw, yearRaw] = expiration.split('/');
+    const month = (monthRaw || '').replace(/\D/g, '');
+    const year = (yearRaw || '').replace(/\D/g, '');
+    const fullYear = year.length === 2 ? `20${year}` : year;
+    const cleanCpf = form.cpf.replace(/\D/g, '');
+
+    if (!cleanCardNumber || !cardForm.cardholderName.trim() || !month || !fullYear || !cleanSecurityCode) {
+      throw new Error('Preencha os dados do cartao para continuar.');
+    }
+    if (!cleanCpf || cleanCpf.length !== 11) {
+      throw new Error('CPF invalido para tokenizacao do cartao.');
+    }
+
+    const mp = new window.MercadoPago(mpPublicKey, { locale: 'pt-BR' });
+    const result = await mp.createCardToken({
+      cardNumber: cleanCardNumber,
+      cardholderName: cardForm.cardholderName.trim(),
+      cardExpirationMonth: month.padStart(2, '0'),
+      cardExpirationYear: fullYear,
+      securityCode: cleanSecurityCode,
+      identificationType: 'CPF',
+      identificationNumber: cleanCpf,
+    });
+
+    if (!result?.id) {
+      throw new Error('Falha ao tokenizar cartao.');
+    }
+    return result.id;
+  }, [cardForm, form.cpf, mpPublicKey, mpSdkReady]);
+
   // Polling for payment status
-  const startPolling = useCallback((orderId: string) => {
+  const startPolling = useCallback((orderId: string, token?: string | null) => {
     if (pollingRef.current) clearInterval(pollingRef.current);
     pollingRef.current = setInterval(async () => {
       try {
+        const queryToken = token || trackingToken;
+        if (!queryToken) return;
         const res = await fetch(
-          `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co/functions/v1/payment-status?order_id=${orderId}`,
+          `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co/functions/v1/payment-status?order_id=${orderId}&tracking_token=${encodeURIComponent(queryToken)}`,
           { headers: { 'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY } }
         );
         const status = await res.json();
         if (status.payment_status === 'approved') {
           clearInterval(pollingRef.current!);
           pollingRef.current = null;
-          setPaymentResult((prev: any) => ({ ...prev, payment_status: 'approved' }));
+          setPaymentResult(prev => (prev ? { ...prev, payment_status: 'approved' } : prev));
           toast.success('Pagamento confirmado!');
         }
       } catch { /* ignore polling errors */ }
     }, 5000);
-  }, []);
+  }, [trackingToken]);
 
   useEffect(() => {
     return () => { if (pollingRef.current) clearInterval(pollingRef.current); };
@@ -206,6 +351,12 @@ const Checkout = () => {
     setSubmitting(true);
 
     try {
+      const idempotencyKey = (globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`).replace(/\./g, '');
+      let cardToken: string | null = null;
+      if (form.payment === 'card') {
+        cardToken = await tokenizeCard();
+      }
+
       const payload = {
         items: items.map(item => ({
           product_id: item.product.id,
@@ -233,25 +384,32 @@ const Checkout = () => {
         },
         payment_method: form.payment,
         coupon_code: appliedCoupon?.code || null,
+        card_token: cardToken,
+        installments: form.payment === 'card' ? cardForm.installments : undefined,
       };
 
       const { data, error } = await supabase.functions.invoke('create-payment', {
         body: payload,
+        headers: {
+          'x-idempotency-key': idempotencyKey,
+        },
       });
 
       if (error) throw error;
       if (data?.error) { toast.error(data.error); return; }
 
+      setTrackingToken(data?.tracking_token || null);
       setPaymentResult(data);
       clearCart();
       setSubmitted(true);
 
       // Start polling for pix/boleto
       if (form.payment !== 'card' && data.payment_status !== 'approved') {
-        startPolling(data.order_id);
+        startPolling(data.order_id, data?.tracking_token);
       }
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao processar pedido.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Erro ao processar pedido.';
+      toast.error(message);
     } finally {
       setSubmitting(false);
     }
@@ -275,8 +433,8 @@ const Checkout = () => {
             <p className="font-body text-muted-foreground">
               Pedido #{paymentResult.order_number}
               {paymentResult.payment_status === 'approved'
-                ? ' — Pagamento aprovado! Você receberá os detalhes por e-mail.'
-                : ' — Complete o pagamento abaixo.'}
+                ? ' â€” Pagamento aprovado! VocÃª receberÃ¡ os detalhes por e-mail.'
+                : ' â€” Complete o pagamento abaixo.'}
             </p>
 
             {/* PIX payment info */}
@@ -292,18 +450,18 @@ const Checkout = () => {
                 )}
                 {paymentResult.pix.qr_code && (
                   <>
-                    <p className="font-body text-xs text-muted-foreground text-center">Ou copie o código Pix:</p>
+                    <p className="font-body text-xs text-muted-foreground text-center">Ou copie o cÃ³digo Pix:</p>
                     <div className="flex gap-2">
                       <Input readOnly value={paymentResult.pix.qr_code} className="font-body text-xs" />
-                      <Button variant="outline" size="sm" onClick={() => { navigator.clipboard.writeText(paymentResult.pix.qr_code); toast.success('Código copiado!'); }}>
+                      <Button variant="outline" size="sm" onClick={() => { navigator.clipboard.writeText(paymentResult.pix.qr_code); toast.success('CÃ³digo copiado!'); }}>
                         <Copy className="w-4 h-4" />
                       </Button>
                     </div>
                   </>
                 )}
-                <p className="font-body text-xs text-muted-foreground">⏱ Validade: 30 minutos • Valor: <strong>{formatCurrency(paymentResult.total)}</strong></p>
-                <Button variant="outline" className="w-full font-body" onClick={() => startPolling(paymentResult.order_id)}>
-                  Já paguei — verificar status
+                <p className="font-body text-xs text-muted-foreground">â± Validade: 30 minutos â€¢ Valor: <strong>{formatCurrency(paymentResult.total)}</strong></p>
+                <Button variant="outline" className="w-full font-body" onClick={() => startPolling(paymentResult.order_id, paymentResult.tracking_token || trackingToken)}>
+                  JÃ¡ paguei â€” verificar status
                 </Button>
               </div>
             )}
@@ -312,12 +470,12 @@ const Checkout = () => {
             {form.payment === 'boleto' && paymentResult.boleto && (
               <div className="bg-card rounded-sm shadow-soft p-6 text-left space-y-3">
                 <h3 className="font-display text-sm font-semibold text-foreground flex items-center gap-2">
-                  <FileText className="w-4 h-4 text-primary" /> Boleto Bancário
+                  <FileText className="w-4 h-4 text-primary" /> Boleto BancÃ¡rio
                 </h3>
                 {paymentResult.boleto.barcode && (
                   <div className="flex gap-2">
                     <Input readOnly value={paymentResult.boleto.barcode} className="font-body text-xs" />
-                    <Button variant="outline" size="sm" onClick={() => { navigator.clipboard.writeText(paymentResult.boleto.barcode); toast.success('Código copiado!'); }}>
+                    <Button variant="outline" size="sm" onClick={() => { navigator.clipboard.writeText(paymentResult.boleto.barcode); toast.success('CÃ³digo copiado!'); }}>
                       <Copy className="w-4 h-4" />
                     </Button>
                   </div>
@@ -327,7 +485,7 @@ const Checkout = () => {
                     <Button variant="outline" className="w-full font-body">Abrir PDF do Boleto</Button>
                   </a>
                 )}
-                <p className="font-body text-xs text-muted-foreground">Vencimento em 3 dias úteis • Valor: <strong>{formatCurrency(paymentResult.total)}</strong></p>
+                <p className="font-body text-xs text-muted-foreground">Vencimento em 3 dias Ãºteis â€¢ Valor: <strong>{formatCurrency(paymentResult.total)}</strong></p>
               </div>
             )}
 
@@ -339,7 +497,7 @@ const Checkout = () => {
                 </h3>
                 <p className="font-body text-sm text-muted-foreground">
                   Pagamento de <strong>{formatCurrency(paymentResult.total)}</strong> aprovado
-                  {paymentResult.card?.last_four && ` no cartão final ****${paymentResult.card.last_four}`}.
+                  {paymentResult.card?.last_four && ` no cartÃ£o final ****${paymentResult.card.last_four}`}.
                   {paymentResult.card?.installments > 1 && ` em ${paymentResult.card.installments}x de ${formatCurrency(paymentResult.card.installment_amount)}`}
                 </p>
               </div>
@@ -357,7 +515,7 @@ const Checkout = () => {
                 Rastrear Pedido
               </Link>
               <Link to="/" className="inline-flex items-center justify-center bg-gradient-rose text-primary-foreground font-body font-semibold text-sm tracking-wider uppercase px-8 py-4 rounded-sm shadow-rose">
-                Voltar à Loja
+                Voltar para a Loja
               </Link>
             </div>
           </motion.div>
@@ -374,8 +532,8 @@ const Checkout = () => {
         <Header />
         <main className="container mx-auto px-4 py-20 text-center">
           <Package className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-          <p className="font-body text-muted-foreground mb-4">Seu carrinho está vazio.</p>
-          <Link to="/colecoes" className="text-primary underline font-body">Voltar às Coleções</Link>
+          <p className="font-body text-muted-foreground mb-4">Seu carrinho esta vazio.</p>
+          <Link to="/colecoes" className="text-primary underline font-body">Voltar para as Colecoes</Link>
         </main>
         <Footer />
       </div>
@@ -442,13 +600,13 @@ const Checkout = () => {
                   {form.isWholesale && (
                     <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <Input placeholder="CNPJ" value={form.cnpj} onChange={e => set('cnpj', maskCNPJ(e.target.value))} className="font-body" />
-                      <Input placeholder="Razão Social" value={form.companyName} onChange={e => set('companyName', e.target.value)} className="font-body" />
+                      <Input placeholder="RazÃ£o Social" value={form.companyName} onChange={e => set('companyName', e.target.value)} className="font-body" />
                     </motion.div>
                   )}
 
                   <div className="flex justify-end pt-2">
                     <Button onClick={() => setStep(2)} disabled={!isStep1Valid} className="bg-gradient-rose text-primary-foreground font-body font-semibold shadow-rose gap-2">
-                      Próximo <ArrowRight className="w-4 h-4" />
+                      PrÃ³ximo <ArrowRight className="w-4 h-4" />
                     </Button>
                   </div>
                 </motion.section>
@@ -457,14 +615,14 @@ const Checkout = () => {
               {/* STEP 2: Address */}
               {step === 2 && (
                 <motion.section key="step2" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="bg-card rounded-sm shadow-soft p-6 space-y-4">
-                  <h2 className="font-display text-lg font-semibold text-foreground">Endereço de Entrega</h2>
+                  <h2 className="font-display text-lg font-semibold text-foreground">EndereÃ§o de Entrega</h2>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="relative md:col-span-1">
                       <Input placeholder="CEP *" value={form.zip} onChange={e => set('zip', maskCEP(e.target.value))} className="font-body" />
                       {cepLoading && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary animate-spin" />}
                     </div>
                     <Input placeholder="Rua / Avenida *" value={form.street} onChange={e => set('street', e.target.value)} className="font-body md:col-span-2" />
-                    <Input placeholder="Número *" value={form.number} onChange={e => set('number', e.target.value)} className="font-body" />
+                    <Input placeholder="NÃºmero *" value={form.number} onChange={e => set('number', e.target.value)} className="font-body" />
                     <Input placeholder="Complemento" value={form.complement} onChange={e => set('complement', e.target.value)} className="font-body" />
                     <Input placeholder="Bairro" value={form.neighborhood} onChange={e => set('neighborhood', e.target.value)} className="font-body" />
                     <Input placeholder="Cidade *" value={form.city} onChange={e => set('city', e.target.value)} className="font-body md:col-span-2" />
@@ -476,7 +634,7 @@ const Checkout = () => {
                       <ArrowLeft className="w-4 h-4" /> Voltar
                     </Button>
                     <Button onClick={() => setStep(3)} disabled={!isStep2Valid} className="bg-gradient-rose text-primary-foreground font-body font-semibold shadow-rose gap-2">
-                      Próximo <ArrowRight className="w-4 h-4" />
+                      PrÃ³ximo <ArrowRight className="w-4 h-4" />
                     </Button>
                   </div>
                 </motion.section>
@@ -491,15 +649,15 @@ const Checkout = () => {
                       <Truck className="w-5 h-5 text-primary" />
                       <div>
                         <p className="font-body text-sm font-semibold text-foreground">
-                          {shipping === 0 ? 'Frete Grátis' : `Frete: ${formatCurrency(shipping)}`}
+                          {shipping === 0 ? 'Frete GrÃ¡tis' : `Frete: ${formatCurrency(shipping)}`}
                         </p>
                         <p className="font-body text-xs text-muted-foreground">
-                          Entrega para {form.city}/{form.state} • CEP {form.zip}
+                          Entrega para {form.city}/{form.state} â€¢ CEP {form.zip}
                         </p>
                       </div>
                     </div>
                     {shipping === 0 && (
-                      <p className="font-body text-xs text-primary">🎉 Parabéns! Você ganhou frete grátis neste pedido.</p>
+                      <p className="font-body text-xs text-primary">ðŸŽ‰ ParabÃ©ns! VocÃª ganhou frete grÃ¡tis neste pedido.</p>
                     )}
                   </div>
 
@@ -508,7 +666,7 @@ const Checkout = () => {
                       <ArrowLeft className="w-4 h-4" /> Voltar
                     </Button>
                     <Button onClick={() => setStep(4)} className="bg-gradient-rose text-primary-foreground font-body font-semibold shadow-rose gap-2">
-                      Próximo <ArrowRight className="w-4 h-4" />
+                      PrÃ³ximo <ArrowRight className="w-4 h-4" />
                     </Button>
                   </div>
                 </motion.section>
@@ -521,8 +679,8 @@ const Checkout = () => {
                   <div className="grid grid-cols-3 gap-3">
                     {([
                       { id: 'pix' as const, label: 'Pix', icon: QrCode, extra: '5% off', enabled: mpPixEnabled },
-                      { id: 'card' as const, label: 'Cartão', icon: CreditCard, extra: `Até ${mpMaxInstallments}x`, enabled: mpCardEnabled },
-                      { id: 'boleto' as const, label: 'Boleto', icon: FileText, extra: '3 dias úteis', enabled: mpBoletoEnabled },
+                      { id: 'card' as const, label: 'CartÃ£o', icon: CreditCard, extra: `AtÃ© ${mpMaxInstallments}x`, enabled: mpCardEnabled },
+                      { id: 'boleto' as const, label: 'Boleto', icon: FileText, extra: '3 dias Ãºteis', enabled: mpBoletoEnabled },
                     ]).filter(m => m.enabled).map(m => (
                       <button key={m.id} onClick={() => set('payment', m.id)}
                         className={`flex flex-col items-center gap-2 p-4 rounded-sm border-2 transition-all ${
@@ -540,31 +698,84 @@ const Checkout = () => {
                     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 p-4 bg-muted/20 rounded-sm border border-border">
                       {!mpPublicKey ? (
                         <p className="font-body text-xs text-destructive md:col-span-2">
-                          ⚠️ Public Key do Mercado Pago não configurada. Configure em Admin → Integrações.
+                          Public Key do Mercado Pago nao configurada. Configure em Admin e Integracoes.
                         </p>
                       ) : (
                         <p className="font-body text-xs text-muted-foreground md:col-span-2">
-                          Preencha os dados do cartão para tokenização segura via Mercado Pago.
+                          Preencha os dados do cartao para tokenizacao segura via Mercado Pago.
+                          {!mpSdkReady ? ' Carregando SDK...' : ''}
                         </p>
                       )}
-                      <Input placeholder="Número do cartão" id="cardNumber" className="font-body md:col-span-2" />
-                      <Input placeholder="Nome no cartão" id="cardholderName" className="font-body" />
+                      <Input
+                        placeholder="Numero do cartao"
+                        value={cardForm.cardNumber}
+                        onChange={e => setCardField('cardNumber', e.target.value)}
+                        className="font-body md:col-span-2"
+                      />
+                      <Input
+                        placeholder="Nome no cartao"
+                        value={cardForm.cardholderName}
+                        onChange={e => setCardField('cardholderName', e.target.value)}
+                        className="font-body"
+                      />
                       <div className="grid grid-cols-2 gap-4">
-                        <Input placeholder="MM/AA" id="cardExpiration" className="font-body" maxLength={5} />
-                        <Input placeholder="CVV" id="securityCode" className="font-body" maxLength={4} />
+                        <Input
+                          placeholder="MM/AA"
+                          value={cardForm.cardExpiration}
+                          onChange={e => setCardField('cardExpiration', e.target.value.replace(/[^\d/]/g, '').slice(0, 5))}
+                          className="font-body"
+                          maxLength={5}
+                        />
+                        <Input
+                          placeholder="CVV"
+                          value={cardForm.securityCode}
+                          onChange={e => setCardField('securityCode', e.target.value.replace(/\D/g, '').slice(0, 4))}
+                          className="font-body"
+                          maxLength={4}
+                        />
                       </div>
                       {/* Installments */}
                       <div className="md:col-span-2 space-y-2">
-                        <p className="font-body text-xs font-semibold text-foreground">Parcelas:</p>
+                        <p className="font-body text-xs font-semibold text-foreground">Parcelas (selecionar uma):</p>
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs font-body">
-                          <div className="p-2 rounded bg-primary/5 border border-primary text-primary font-medium">1x de {formatCurrency(finalTotal)} s/ juros</div>
+                          <button
+                            type="button"
+                            onClick={() => setCardField('installments', 1)}
+                            className={`p-2 rounded border text-left ${
+                              cardForm.installments === 1 ? 'bg-primary/5 border-primary text-primary font-medium' : 'bg-muted/30 border-border text-muted-foreground'
+                            }`}
+                          >
+                            1x de {formatCurrency(finalTotal)} s/ juros
+                          </button>
                           {Array.from({ length: Math.min(5, mpMaxInstallments - 1) }, (_, i) => i + 2).map(n => {
                             const t = finalTotal * (1 + 0.0299 * n);
-                            return <div key={n} className="p-2 rounded bg-muted/30 border border-border text-muted-foreground">{n}x de {formatCurrency(t / n)}</div>;
+                            return (
+                              <button
+                                key={n}
+                                type="button"
+                                onClick={() => setCardField('installments', n)}
+                                className={`p-2 rounded border text-left ${
+                                  cardForm.installments === n ? 'bg-primary/5 border-primary text-primary font-medium' : 'bg-muted/30 border-border text-muted-foreground'
+                                }`}
+                              >
+                                {n}x de {formatCurrency(t / n)}
+                              </button>
+                            );
                           })}
                           {Array.from({ length: Math.max(0, Math.min(6, mpMaxInstallments - 6)) }, (_, i) => i + 7).map(n => {
                             const t = finalTotal * (1 + 0.0349 * n);
-                            return <div key={n} className="p-2 rounded bg-muted/30 border border-border text-muted-foreground">{n}x de {formatCurrency(t / n)}</div>;
+                            return (
+                              <button
+                                key={n}
+                                type="button"
+                                onClick={() => setCardField('installments', n)}
+                                className={`p-2 rounded border text-left ${
+                                  cardForm.installments === n ? 'bg-primary/5 border-primary text-primary font-medium' : 'bg-muted/30 border-border text-muted-foreground'
+                                }`}
+                              >
+                                {n}x de {formatCurrency(t / n)}
+                              </button>
+                            );
                           })}
                         </div>
                       </div>
@@ -630,7 +841,7 @@ const Checkout = () => {
                 )}
                 <div className="flex justify-between text-muted-foreground">
                   <span>Frete</span>
-                  <span>{shipping === 0 ? <span className="text-primary font-medium">Grátis</span> : formatCurrency(shipping)}</span>
+                  <span>{shipping === 0 ? <span className="text-primary font-medium">GrÃ¡tis</span> : formatCurrency(shipping)}</span>
                 </div>
                 {form.payment === 'pix' && (
                   <div className="flex justify-between text-primary font-medium">
@@ -667,7 +878,7 @@ const Checkout = () => {
           <div className="fixed bottom-0 left-0 right-0 bg-card border-t border-border p-4 lg:hidden z-50">
             <button onClick={handleSubmit} disabled={submitting}
               className="w-full bg-gradient-rose text-primary-foreground font-body font-semibold text-sm tracking-wider uppercase px-6 py-4 rounded-sm shadow-rose disabled:opacity-50 flex items-center justify-center gap-2">
-              {submitting ? <><Loader2 className="w-4 h-4 animate-spin" /> Processando...</> : `Finalizar — ${formatCurrency(finalTotal)}`}
+              {submitting ? <><Loader2 className="w-4 h-4 animate-spin" /> Processando...</> : `Finalizar â€” ${formatCurrency(finalTotal)}`}
             </button>
           </div>
         )}
@@ -678,3 +889,4 @@ const Checkout = () => {
 };
 
 export default Checkout;
+

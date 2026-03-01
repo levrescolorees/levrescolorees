@@ -1,17 +1,29 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { Save, CreditCard, CheckCircle2, AlertCircle, Eye, EyeOff } from 'lucide-react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { useStoreSettings } from '@/hooks/useStoreSettings';
+import { useAdminStoreSettings } from '@/hooks/useStoreSettings';
+
+interface MercadoPagoSettings {
+  public_key?: string;
+  access_token?: string;
+  environment?: 'sandbox' | 'production';
+  enabled?: boolean;
+  pix_enabled?: boolean;
+  card_enabled?: boolean;
+  boleto_enabled?: boolean;
+  max_installments?: number;
+  webhook_secret?: string;
+}
 
 const AdminIntegrations = () => {
   const qc = useQueryClient();
-  const { data: settings, isLoading } = useStoreSettings();
+  const { data: settings, isLoading } = useAdminStoreSettings();
 
   const [mpPublicKey, setMpPublicKey] = useState('');
   const [mpAccessToken, setMpAccessToken] = useState('');
@@ -28,7 +40,7 @@ const AdminIntegrations = () => {
 
   useEffect(() => {
     if (settings?.mercado_pago) {
-      const mp = settings.mercado_pago as any;
+      const mp = settings.mercado_pago as MercadoPagoSettings;
       setMpPublicKey(mp.public_key || '');
       setMpAccessToken(mp.access_token || '');
       setMpEnvironment(mp.environment || 'sandbox');
@@ -61,22 +73,19 @@ const AdminIntegrations = () => {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['store_settings'] });
-      toast.success('Configurações do Mercado Pago salvas!');
+      qc.invalidateQueries({ queryKey: ['store_settings_admin'] });
+      toast.success('ConfiguraÃ§Ãµes do Mercado Pago salvas!');
     },
-    onError: () => toast.error('Erro ao salvar configurações.'),
+    onError: () => toast.error('Erro ao salvar configuraÃ§Ãµes.'),
   });
 
   if (isLoading) {
     return <div className="flex items-center justify-center py-20 font-body text-muted-foreground">Carregando...</div>;
   }
 
-  const maskedToken = mpAccessToken
-    ? mpAccessToken.slice(0, 12) + '••••••••' + mpAccessToken.slice(-4)
-    : '';
-
   return (
     <div className="space-y-6">
-      <h1 className="font-display text-2xl font-bold text-foreground">Integrações</h1>
+      <h1 className="font-display text-2xl font-bold text-foreground">IntegraÃ§Ãµes</h1>
 
       {/* Mercado Pago Card */}
       <div className="bg-card rounded-lg shadow-soft p-6 space-y-6 max-w-2xl">
@@ -87,7 +96,7 @@ const AdminIntegrations = () => {
             </div>
             <div>
               <h2 className="font-display text-lg font-semibold text-foreground">Mercado Pago</h2>
-              <p className="font-body text-xs text-muted-foreground">Pagamentos via Pix, Cartão e Boleto</p>
+              <p className="font-body text-xs text-muted-foreground">Pagamentos via Pix, CartÃ£o e Boleto</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -113,8 +122,8 @@ const AdminIntegrations = () => {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="sandbox">🧪 Sandbox (Testes)</SelectItem>
-                <SelectItem value="production">🚀 Produção</SelectItem>
+                <SelectItem value="sandbox">ðŸ§ª Sandbox (Testes)</SelectItem>
+                <SelectItem value="production">ðŸš€ ProduÃ§Ã£o</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -139,7 +148,7 @@ const AdminIntegrations = () => {
               </button>
             </div>
             <p className="font-body text-xs text-muted-foreground mt-1">
-              Usada no frontend para tokenizar cartões (Checkout Transparente)
+              Usada no frontend para tokenizar cartÃµes (Checkout Transparente)
             </p>
           </div>
 
@@ -163,24 +172,24 @@ const AdminIntegrations = () => {
               </button>
             </div>
             <p className="font-body text-xs text-muted-foreground mt-1">
-              Usado no backend para processar pagamentos. Encontre em: Mercado Pago → Credenciais
+              Usado no backend para processar pagamentos. Encontre em: Mercado Pago â†’ Credenciais
             </p>
           </div>
 
           {/* Payment methods */}
           <div>
-            <label className="font-body text-sm font-medium text-foreground mb-2 block">Métodos de Pagamento</label>
+            <label className="font-body text-sm font-medium text-foreground mb-2 block">MÃ©todos de Pagamento</label>
             <div className="space-y-3">
               <label className="flex items-center justify-between bg-muted/30 rounded-md px-4 py-3 cursor-pointer">
                 <span className="font-body text-sm text-foreground">Pix</span>
                 <Switch checked={mpPixEnabled} onCheckedChange={setMpPixEnabled} />
               </label>
               <label className="flex items-center justify-between bg-muted/30 rounded-md px-4 py-3 cursor-pointer">
-                <span className="font-body text-sm text-foreground">Cartão de Crédito</span>
+                <span className="font-body text-sm text-foreground">CartÃ£o de CrÃ©dito</span>
                 <Switch checked={mpCardEnabled} onCheckedChange={setMpCardEnabled} />
               </label>
               <label className="flex items-center justify-between bg-muted/30 rounded-md px-4 py-3 cursor-pointer">
-                <span className="font-body text-sm text-foreground">Boleto Bancário</span>
+                <span className="font-body text-sm text-foreground">Boleto BancÃ¡rio</span>
                 <Switch checked={mpBoletoEnabled} onCheckedChange={setMpBoletoEnabled} />
               </label>
             </div>
@@ -206,14 +215,14 @@ const AdminIntegrations = () => {
               </button>
             </div>
             <p className="font-body text-xs text-muted-foreground mt-1">
-              Configure este secret no painel do Mercado Pago em Webhooks → Assinatura secreta. Ele é usado para validar que as notificações realmente vieram do Mercado Pago.
+              Configure este secret no painel do Mercado Pago em Webhooks â†’ Assinatura secreta. Ele Ã© usado para validar que as notificaÃ§Ãµes realmente vieram do Mercado Pago.
             </p>
           </div>
 
           {/* Max installments */}
           {mpCardEnabled && (
             <div>
-              <label className="font-body text-sm font-medium text-foreground">Máximo de Parcelas</label>
+              <label className="font-body text-sm font-medium text-foreground">MÃ¡ximo de Parcelas</label>
               <Select value={mpMaxInstallments} onValueChange={setMpMaxInstallments}>
                 <SelectTrigger className="mt-1 max-w-xs">
                   <SelectValue />
@@ -221,7 +230,7 @@ const AdminIntegrations = () => {
                 <SelectContent>
                   {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(n => (
                     <SelectItem key={n} value={String(n)}>
-                      {n}x {n === 1 ? '(à vista)' : n <= 6 ? '(2.99% a.m.)' : '(3.49% a.m.)'}
+                      {n}x {n === 1 ? '(Ã  vista)' : n <= 6 ? '(2.99% a.m.)' : '(3.49% a.m.)'}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -231,7 +240,7 @@ const AdminIntegrations = () => {
         </div>
 
         <Button onClick={() => saveMp.mutate()} disabled={saveMp.isPending} className="w-full sm:w-auto">
-          <Save className="w-4 h-4 mr-2" /> Salvar Configurações
+          <Save className="w-4 h-4 mr-2" /> Salvar ConfiguraÃ§Ãµes
         </Button>
       </div>
     </div>
@@ -239,3 +248,4 @@ const AdminIntegrations = () => {
 };
 
 export default AdminIntegrations;
+

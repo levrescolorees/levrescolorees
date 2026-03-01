@@ -688,6 +688,18 @@ export type Database = {
           variants_count: number
         }[]
       }
+      consume_rate_limit: {
+        Args: {
+          p_identifier: string
+          p_limit: number
+          p_window_seconds: number
+        }
+        Returns: Json
+      }
+      get_public_store_settings: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -697,8 +709,16 @@ export type Database = {
       }
       is_admin_or_operador: { Args: { _user_id: string }; Returns: boolean }
       is_staff: { Args: { _user_id: string }; Returns: boolean }
+      register_webhook_event: {
+        Args: { p_event_key: string; p_provider: string }
+        Returns: boolean
+      }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
+      validate_coupon: {
+        Args: { p_code: string; p_subtotal?: number }
+        Returns: Json
+      }
     }
     Enums: {
       app_role: "admin" | "operador" | "financeiro"
