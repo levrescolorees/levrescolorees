@@ -35,6 +35,8 @@ import AdminCoupons from "./pages/admin/AdminCoupons";
 import AdminSettings from "./pages/admin/AdminSettings";
 import AdminMedia from "./pages/admin/AdminMedia";
 import AdminIntegrations from "./pages/admin/AdminIntegrations";
+import AdminIntegrationMercadoPago from "./pages/admin/AdminIntegrationMercadoPago";
+import AdminIntegrationSuperFrete from "./pages/admin/AdminIntegrationSuperFrete";
 import AdminThemeEditor from "./pages/admin/AdminThemeEditor";
 
 const queryClient = new QueryClient({
@@ -85,6 +87,8 @@ const App = () => (
                   <Route path="cupons" element={<AdminCoupons />} />
                   <Route path="midia" element={<AdminMedia />} />
                   <Route path="integracoes" element={<AdminIntegrations />} />
+                  <Route path="integracoes/mercado-pago" element={<AdminIntegrationMercadoPago />} />
+                  <Route path="integracoes/superfrete" element={<AdminIntegrationSuperFrete />} />
                   <Route path="configuracoes" element={<AdminSettings />} />
                   <Route path="theme-editor" element={<AdminThemeEditor />} />
                 </Route>
