@@ -1,49 +1,35 @@
 
 
-## Redesign da Tela de Integrações — Estilo Enterprise com Grid de Cards
+## Adicionar campo de Token no painel SuperFrete
 
-### Conceito
+### Problema
+Hoje o token da SuperFrete é armazenado como secret do Supabase (`SUPERFRETE_TOKEN`), sem possibilidade de alteração pelo admin. O usuário quer autonomia total para trocar o token direto no painel.
 
-Transformar a página `AdminIntegrations` de uma lista vertical de formulários em um **hub de integrações estilo enterprise** (como na referência). A página principal mostra um grid de cards com logos, nome, descrição e status (Instalado/Inativo). Ao clicar num card, o usuário navega para a página de configuração daquela integração específica.
+### Solução
+Armazenar o token no campo `value` da tabela `store_settings` (key: `superfrete`) junto com as outras configs, e atualizar a edge function para ler o token de lá em vez de `Deno.env.get("SUPERFRETE_TOKEN")`.
 
-### Estrutura
+### Mudanças
 
-```text
-/admin/integracoes          → Grid de cards (hub)
-/admin/integracoes/mercado-pago  → Config do Mercado Pago (formulário atual)
-/admin/integracoes/superfrete    → Config da SuperFrete (formulário atual)
-```
+**1. `src/pages/admin/AdminIntegrationSuperFrete.tsx`**
+- Adicionar estado `sfToken` e campo de input tipo password com botão de mostrar/ocultar
+- Salvar o token junto com as demais configurações no `store_settings`
+- Remover o texto "entre em contato com o suporte"
+- Mostrar indicador visual se o token está preenchido ou não
 
-### Arquivos
+**2. `supabase/functions/calculate-shipping/index.ts`**
+- Ler o token de `settings.token` (vindo do `store_settings`) em vez de `Deno.env.get("SUPERFRETE_TOKEN")`
+- Manter fallback para o secret caso `settings.token` não exista (retrocompatibilidade)
 
-| Arquivo | Ação |
-|---|---|
-| `src/assets/logo-mercadopago.png` | Copiar imagem enviada pelo usuário |
-| `src/assets/logo-superfrete.png` | Copiar imagem enviada pelo usuário |
-| `src/pages/admin/AdminIntegrations.tsx` | Reescrever como hub com grid de cards |
-| `src/pages/admin/AdminIntegrationMercadoPago.tsx` | Novo — extrair formulário do MP |
-| `src/pages/admin/AdminIntegrationSuperFrete.tsx` | Novo — extrair formulário da SF |
-| `src/App.tsx` | Adicionar rotas `integracoes/:slug` |
+### Segurança
+- O token fica na tabela `store_settings` que só admins podem escrever (RLS já garante isso)
+- A leitura pública via `get_public_store_settings` expõe todos os settings — porém a edge function usa `SERVICE_ROLE_KEY`, então o token não precisa ser exposto no frontend
+- No frontend, o token será mascarado (input type password) e só enviado na mutation de save
 
-### Design dos Cards (Hub)
+### Nota sobre `get_public_store_settings`
+A function RPC `get_public_store_settings` retorna TODOS os settings publicamente. Isso significa que o token ficaria exposto via essa RPC. Para evitar isso, vou atualizar a function para excluir campos sensíveis, ou armazenar o token em uma key separada (`superfrete_token`) que a RPC filtra.
 
-- Grid responsivo: 2 colunas mobile, 3-4 desktop
-- Cada card: logo grande (80x80), nome, descrição curta, badge de status (verde "Instalado" / cinza "Disponível")
-- Hover: elevação suave + borda primary
-- Categorias: "Pagamentos", "Frete" (como seções com título)
-- Cards futuros placeholder: WhatsApp, Instagram (com label "Em breve" e desabilitados)
+**Abordagem escolhida**: Salvar o token dentro do JSON de `superfrete` mas atualizar a RPC `get_public_store_settings` para remover o campo `token` do JSON antes de retornar.
 
-### Páginas de Config
-
-- Header com botão voltar (ArrowLeft) + logo + título
-- Formulário idêntico ao atual, apenas extraído para componente próprio
-- Mantém toda a lógica de estado, mutations e useEffect existente
-
-### Implementacao
-
-1. Copiar as 2 logos (Mercado Pago e SuperFrete) para `src/assets/`
-2. Criar `AdminIntegrationMercadoPago.tsx` com o formulário MP extraído
-3. Criar `AdminIntegrationSuperFrete.tsx` com o formulário SF extraído
-4. Reescrever `AdminIntegrations.tsx` como hub grid com cards clicáveis usando `useNavigate`
-5. Adicionar rotas nested em `App.tsx`
+**3. Migration SQL**
+- Atualizar a function `get_public_store_settings` para sanitizar o campo `token` do setting `superfrete` antes de retornar
 
