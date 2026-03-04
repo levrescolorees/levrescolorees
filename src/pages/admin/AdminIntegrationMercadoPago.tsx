@@ -1,0 +1,211 @@
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Save, CheckCircle2, AlertCircle, Eye, EyeOff, ArrowLeft } from 'lucide-react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { toast } from 'sonner';
+import { useAdminStoreSettings } from '@/hooks/useStoreSettings';
+import logoMercadoPago from '@/assets/logo-mercadopago.png';
+
+interface MercadoPagoSettings {
+  public_key?: string;
+  access_token?: string;
+  environment?: 'sandbox' | 'production';
+  enabled?: boolean;
+  pix_enabled?: boolean;
+  card_enabled?: boolean;
+  boleto_enabled?: boolean;
+  max_installments?: number;
+  webhook_secret?: string;
+}
+
+const AdminIntegrationMercadoPago = () => {
+  const navigate = useNavigate();
+  const qc = useQueryClient();
+  const { data: settings, isLoading } = useAdminStoreSettings();
+
+  const [mpPublicKey, setMpPublicKey] = useState('');
+  const [mpAccessToken, setMpAccessToken] = useState('');
+  const [mpEnvironment, setMpEnvironment] = useState<'sandbox' | 'production'>('sandbox');
+  const [mpEnabled, setMpEnabled] = useState(false);
+  const [mpPixEnabled, setMpPixEnabled] = useState(true);
+  const [mpCardEnabled, setMpCardEnabled] = useState(true);
+  const [mpBoletoEnabled, setMpBoletoEnabled] = useState(true);
+  const [mpMaxInstallments, setMpMaxInstallments] = useState('12');
+  const [mpWebhookSecret, setMpWebhookSecret] = useState('');
+  const [showToken, setShowToken] = useState(false);
+  const [showPublicKey, setShowPublicKey] = useState(false);
+  const [showWebhookSecret, setShowWebhookSecret] = useState(false);
+
+  useEffect(() => {
+    if (settings?.mercado_pago) {
+      const mp = settings.mercado_pago as MercadoPagoSettings;
+      setMpPublicKey(mp.public_key || '');
+      setMpAccessToken(mp.access_token || '');
+      setMpEnvironment(mp.environment || 'sandbox');
+      setMpEnabled(mp.enabled ?? false);
+      setMpPixEnabled(mp.pix_enabled ?? true);
+      setMpCardEnabled(mp.card_enabled ?? true);
+      setMpBoletoEnabled(mp.boleto_enabled ?? true);
+      setMpMaxInstallments(String(mp.max_installments || 12));
+      setMpWebhookSecret(mp.webhook_secret || '');
+    }
+  }, [settings]);
+
+  const saveMp = useMutation({
+    mutationFn: async () => {
+      const value = {
+        public_key: mpPublicKey,
+        access_token: mpAccessToken,
+        environment: mpEnvironment,
+        enabled: mpEnabled,
+        pix_enabled: mpPixEnabled,
+        card_enabled: mpCardEnabled,
+        boleto_enabled: mpBoletoEnabled,
+        max_installments: Number(mpMaxInstallments),
+        webhook_secret: mpWebhookSecret,
+      };
+      const { error } = await supabase
+        .from('store_settings')
+        .upsert({ key: 'mercado_pago', value }, { onConflict: 'key' });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['store_settings'] });
+      qc.invalidateQueries({ queryKey: ['store_settings_admin'] });
+      toast.success('Configurações do Mercado Pago salvas!');
+    },
+    onError: () => toast.error('Erro ao salvar configurações.'),
+  });
+
+  if (isLoading) {
+    return <div className="flex items-center justify-center py-20 font-body text-muted-foreground">Carregando...</div>;
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center gap-4">
+        <Button variant="ghost" size="icon" onClick={() => navigate('/admin/integracoes')}>
+          <ArrowLeft className="w-5 h-5" />
+        </Button>
+        <img src={logoMercadoPago} alt="Mercado Pago" className="w-10 h-10 rounded-lg object-contain" />
+        <div>
+          <h1 className="font-display text-2xl font-bold text-foreground">Mercado Pago</h1>
+          <p className="font-body text-sm text-muted-foreground">Pagamentos via Pix, Cartão e Boleto</p>
+        </div>
+        <div className="ml-auto flex items-center gap-2">
+          {mpEnabled ? (
+            <span className="flex items-center gap-1 text-xs font-body text-green-600">
+              <CheckCircle2 className="w-3.5 h-3.5" /> Ativo
+            </span>
+          ) : (
+            <span className="flex items-center gap-1 text-xs font-body text-muted-foreground">
+              <AlertCircle className="w-3.5 h-3.5" /> Inativo
+            </span>
+          )}
+          <Switch checked={mpEnabled} onCheckedChange={setMpEnabled} />
+        </div>
+      </div>
+
+      {/* Form */}
+      <div className="bg-card rounded-lg shadow-soft p-6 space-y-6 max-w-2xl">
+        <div className="space-y-4">
+          {/* Environment */}
+          <div>
+            <label className="font-body text-sm font-medium text-foreground">Ambiente</label>
+            <Select value={mpEnvironment} onValueChange={(v: 'sandbox' | 'production') => setMpEnvironment(v)}>
+              <SelectTrigger className="mt-1 max-w-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="sandbox">🧪 Sandbox (Testes)</SelectItem>
+                <SelectItem value="production">🚀 Produção</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Public Key */}
+          <div>
+            <label className="font-body text-sm font-medium text-foreground">Public Key</label>
+            <div className="relative mt-1">
+              <Input type={showPublicKey ? 'text' : 'password'} value={mpPublicKey} onChange={e => setMpPublicKey(e.target.value)} placeholder="APP_USR-... ou TEST-..." className="font-body pr-10" />
+              <button type="button" onClick={() => setShowPublicKey(!showPublicKey)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
+                {showPublicKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+            <p className="font-body text-xs text-muted-foreground mt-1">Usada no frontend para tokenizar cartões (Checkout Transparente)</p>
+          </div>
+
+          {/* Access Token */}
+          <div>
+            <label className="font-body text-sm font-medium text-foreground">Access Token</label>
+            <div className="relative mt-1">
+              <Input type={showToken ? 'text' : 'password'} value={mpAccessToken} onChange={e => setMpAccessToken(e.target.value)} placeholder="APP_USR-... ou TEST-..." className="font-body pr-10" />
+              <button type="button" onClick={() => setShowToken(!showToken)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
+                {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+            <p className="font-body text-xs text-muted-foreground mt-1">Usado no backend para processar pagamentos. Encontre em: Mercado Pago → Credenciais</p>
+          </div>
+
+          {/* Payment methods */}
+          <div>
+            <label className="font-body text-sm font-medium text-foreground mb-2 block">Métodos de Pagamento</label>
+            <div className="space-y-3">
+              <label className="flex items-center justify-between bg-muted/30 rounded-md px-4 py-3 cursor-pointer">
+                <span className="font-body text-sm text-foreground">Pix</span>
+                <Switch checked={mpPixEnabled} onCheckedChange={setMpPixEnabled} />
+              </label>
+              <label className="flex items-center justify-between bg-muted/30 rounded-md px-4 py-3 cursor-pointer">
+                <span className="font-body text-sm text-foreground">Cartão de Crédito</span>
+                <Switch checked={mpCardEnabled} onCheckedChange={setMpCardEnabled} />
+              </label>
+              <label className="flex items-center justify-between bg-muted/30 rounded-md px-4 py-3 cursor-pointer">
+                <span className="font-body text-sm text-foreground">Boleto Bancário</span>
+                <Switch checked={mpBoletoEnabled} onCheckedChange={setMpBoletoEnabled} />
+              </label>
+            </div>
+          </div>
+
+          {/* Webhook Secret */}
+          <div>
+            <label className="font-body text-sm font-medium text-foreground">Webhook Secret</label>
+            <div className="relative mt-1">
+              <Input type={showWebhookSecret ? 'text' : 'password'} value={mpWebhookSecret} onChange={e => setMpWebhookSecret(e.target.value)} placeholder="Cole aqui o secret do webhook" className="font-body pr-10" />
+              <button type="button" onClick={() => setShowWebhookSecret(!showWebhookSecret)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
+                {showWebhookSecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+            <p className="font-body text-xs text-muted-foreground mt-1">Configure este secret no painel do Mercado Pago em Webhooks → Assinatura secreta.</p>
+          </div>
+
+          {/* Max installments */}
+          {mpCardEnabled && (
+            <div>
+              <label className="font-body text-sm font-medium text-foreground">Máximo de Parcelas</label>
+              <Select value={mpMaxInstallments} onValueChange={setMpMaxInstallments}>
+                <SelectTrigger className="mt-1 max-w-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(n => (
+                    <SelectItem key={n} value={String(n)}>
+                      {n}x {n === 1 ? '(à vista)' : n <= 6 ? '(2.99% a.m.)' : '(3.49% a.m.)'}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+        </div>
+
+        <Button onClick={() => saveMp.mutate()} disabled={saveMp.isPending} className="w-full sm:w-auto">
+          <Save className="w-4 h-4 mr-2" /> Salvar Configurações
+        </Button>
+      </div>
+    </div>
+  );
+};
+
+export default AdminIntegrationMercadoPago;
