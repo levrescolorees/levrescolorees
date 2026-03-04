@@ -1,58 +1,49 @@
 
 
-## Integração SuperFrete — Cotação de Frete em Tempo Real
+## Redesign da Tela de Integrações — Estilo Enterprise com Grid de Cards
 
-### Contexto atual
-O checkout usa regras de frete estáticas da tabela `shipping_rules` (fixo por estado, grátis acima de X). Não há cotação real com transportadoras.
+### Conceito
 
-### O que será implementado
+Transformar a página `AdminIntegrations` de uma lista vertical de formulários em um **hub de integrações estilo enterprise** (como na referência). A página principal mostra um grid de cards com logos, nome, descrição e status (Instalado/Inativo). Ao clicar num card, o usuário navega para a página de configuração daquela integração específica.
 
-**1. Edge Function `calculate-shipping`**
-- Recebe: CEP de origem (da loja, configurável), CEP de destino, lista de produtos com peso/dimensões
-- Chama `POST https://sandbox.superfrete.com/api/v0/calculator` (ou produção) com Bearer token
-- Retorna as opções de frete (PAC, Sedex, Mini Envios, etc.) com preço, prazo e transportadora
-- Headers obrigatórios: `Authorization: Bearer {token}`, `User-Agent`, `Content-Type`
+### Estrutura
 
-**2. Secret do token SuperFrete**
-- Armazenar `SUPERFRETE_TOKEN` como secret do Supabase (via tool)
-- O admin poderá configurar ambiente (sandbox/produção) na página de Integrações
-
-**3. Campos de peso/dimensões nos produtos**
-- Migration: adicionar colunas `weight`, `height`, `width`, `length` na tabela `products` (todos `numeric`, default 0)
-- Atualizar o formulário de produto (`ProductForm.tsx`) com esses campos
-
-**4. Config do CEP de origem na página de Integrações**
-- Novo card "SuperFrete" em `AdminIntegrations.tsx` com campos: token, ambiente, CEP de origem, serviços habilitados (PAC/Sedex/Mini Envios)
-- Salvar em `store_settings` com key `superfrete`
-
-**5. Checkout — seleção de frete dinâmico**
-- No step 2 (endereço), após preencher o CEP, chamar a edge function
-- Exibir opções de frete retornadas (transportadora, prazo, preço) como radio buttons
-- Substituir o cálculo estático atual pelo valor selecionado
-- Fallback: se a API falhar, usar as regras estáticas existentes
+```text
+/admin/integracoes          → Grid de cards (hub)
+/admin/integracoes/mercado-pago  → Config do Mercado Pago (formulário atual)
+/admin/integracoes/superfrete    → Config da SuperFrete (formulário atual)
+```
 
 ### Arquivos
 
-| Arquivo | Mudança |
+| Arquivo | Ação |
 |---|---|
-| `supabase/functions/calculate-shipping/index.ts` | Novo — edge function proxy para SuperFrete |
-| `supabase/config.toml` | Adicionar `[functions.calculate-shipping]` |
-| Migration SQL | Adicionar `weight`, `height`, `width`, `length` em `products` |
-| `src/pages/admin/AdminIntegrations.tsx` | Novo card SuperFrete |
-| `src/pages/admin/ProductForm.tsx` | Campos peso/dimensões |
-| `src/pages/Checkout.tsx` | Cotação dinâmica no step 2, seleção de transportadora |
+| `src/assets/logo-mercadopago.png` | Copiar imagem enviada pelo usuário |
+| `src/assets/logo-superfrete.png` | Copiar imagem enviada pelo usuário |
+| `src/pages/admin/AdminIntegrations.tsx` | Reescrever como hub com grid de cards |
+| `src/pages/admin/AdminIntegrationMercadoPago.tsx` | Novo — extrair formulário do MP |
+| `src/pages/admin/AdminIntegrationSuperFrete.tsx` | Novo — extrair formulário da SF |
+| `src/App.tsx` | Adicionar rotas `integracoes/:slug` |
 
-### Fluxo
+### Design dos Cards (Hub)
 
-```text
-Checkout Step 2 (CEP preenchido)
-  → fetch edge function calculate-shipping
-  → SuperFrete API /api/v0/calculator
-  ← retorna [{name: "PAC", price: 18.50, delivery_time: 7}, ...]
-  → usuário seleciona opção
-  → valor de frete atualizado no resumo
-```
+- Grid responsivo: 2 colunas mobile, 3-4 desktop
+- Cada card: logo grande (80x80), nome, descrição curta, badge de status (verde "Instalado" / cinza "Disponível")
+- Hover: elevação suave + borda primary
+- Categorias: "Pagamentos", "Frete" (como seções com título)
+- Cards futuros placeholder: WhatsApp, Instagram (com label "Em breve" e desabilitados)
 
-### Pré-requisito
-O usuário precisará gerar um token na SuperFrete (sandbox ou produção) e adicioná-lo como secret.
+### Páginas de Config
+
+- Header com botão voltar (ArrowLeft) + logo + título
+- Formulário idêntico ao atual, apenas extraído para componente próprio
+- Mantém toda a lógica de estado, mutations e useEffect existente
+
+### Implementacao
+
+1. Copiar as 2 logos (Mercado Pago e SuperFrete) para `src/assets/`
+2. Criar `AdminIntegrationMercadoPago.tsx` com o formulário MP extraído
+3. Criar `AdminIntegrationSuperFrete.tsx` com o formulário SF extraído
+4. Reescrever `AdminIntegrations.tsx` como hub grid com cards clicáveis usando `useNavigate`
+5. Adicionar rotas nested em `App.tsx`
 
