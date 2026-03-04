@@ -1,41 +1,58 @@
 
 
-## Diagnóstico: Logo salva no banco mas não recarrega
+## Integração SuperFrete — Cotação de Frete em Tempo Real
 
-### Causa raiz
-O hook `useStoreSettings()` chama `supabase.rpc('get_public_store_settings')`, mas **essa RPC não existe no banco**. Resultado: o tema salvo nunca é carregado de volta, então a logo (e qualquer customização) some ao recarregar a página.
+### Contexto atual
+O checkout usa regras de frete estáticas da tabela `shipping_rules` (fixo por estado, grátis acima de X). Não há cotação real com transportadoras.
 
-A logo de fato é persistida corretamente no storage e no `store_settings` (confirmei: `store_settings.theme.components.images.logo` tem a URL). O problema é exclusivamente na leitura.
+### O que será implementado
 
-### Solução
+**1. Edge Function `calculate-shipping`**
+- Recebe: CEP de origem (da loja, configurável), CEP de destino, lista de produtos com peso/dimensões
+- Chama `POST https://sandbox.superfrete.com/api/v0/calculator` (ou produção) com Bearer token
+- Retorna as opções de frete (PAC, Sedex, Mini Envios, etc.) com preço, prazo e transportadora
+- Headers obrigatórios: `Authorization: Bearer {token}`, `User-Agent`, `Content-Type`
 
-Criar a RPC `get_public_store_settings` que retorna todas as settings públicas como um objeto JSON.
+**2. Secret do token SuperFrete**
+- Armazenar `SUPERFRETE_TOKEN` como secret do Supabase (via tool)
+- O admin poderá configurar ambiente (sandbox/produção) na página de Integrações
 
-**1. Migration SQL** — criar a função `get_public_store_settings`
+**3. Campos de peso/dimensões nos produtos**
+- Migration: adicionar colunas `weight`, `height`, `width`, `length` na tabela `products` (todos `numeric`, default 0)
+- Atualizar o formulário de produto (`ProductForm.tsx`) com esses campos
 
-```sql
-CREATE OR REPLACE FUNCTION public.get_public_store_settings()
-RETURNS jsonb
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = 'public'
-AS $$
-  SELECT COALESCE(
-    jsonb_object_agg(key, value),
-    '{}'::jsonb
-  )
-  FROM store_settings;
-$$;
+**4. Config do CEP de origem na página de Integrações**
+- Novo card "SuperFrete" em `AdminIntegrations.tsx` com campos: token, ambiente, CEP de origem, serviços habilitados (PAC/Sedex/Mini Envios)
+- Salvar em `store_settings` com key `superfrete`
+
+**5. Checkout — seleção de frete dinâmico**
+- No step 2 (endereço), após preencher o CEP, chamar a edge function
+- Exibir opções de frete retornadas (transportadora, prazo, preço) como radio buttons
+- Substituir o cálculo estático atual pelo valor selecionado
+- Fallback: se a API falhar, usar as regras estáticas existentes
+
+### Arquivos
+
+| Arquivo | Mudança |
+|---|---|
+| `supabase/functions/calculate-shipping/index.ts` | Novo — edge function proxy para SuperFrete |
+| `supabase/config.toml` | Adicionar `[functions.calculate-shipping]` |
+| Migration SQL | Adicionar `weight`, `height`, `width`, `length` em `products` |
+| `src/pages/admin/AdminIntegrations.tsx` | Novo card SuperFrete |
+| `src/pages/admin/ProductForm.tsx` | Campos peso/dimensões |
+| `src/pages/Checkout.tsx` | Cotação dinâmica no step 2, seleção de transportadora |
+
+### Fluxo
+
+```text
+Checkout Step 2 (CEP preenchido)
+  → fetch edge function calculate-shipping
+  → SuperFrete API /api/v0/calculator
+  ← retorna [{name: "PAC", price: 18.50, delivery_time: 7}, ...]
+  → usuário seleciona opção
+  → valor de frete atualizado no resumo
 ```
 
-Isso faz `supabase.rpc('get_public_store_settings')` retornar `{ "theme": {...}, "brand": {...}, ... }`, que é exatamente o formato esperado por `useStoreSettings` e `ThemeProvider`.
-
-**2. Arquivos impactados**: Nenhum — o código front-end já está correto. Só falta a função no banco.
-
-### Resultado esperado
-Após a migration, ao abrir o Editor de Tema:
-- Logo e Hero Banner salvos serão carregados corretamente
-- Cores, fontes e demais customizações também persistirão entre sessões
-- A loja pública também refletirá o tema salvo (ThemeProvider usa o mesmo hook)
+### Pré-requisito
+O usuário precisará gerar um token na SuperFrete (sandbox ou produção) e adicioná-lo como secret.
 
