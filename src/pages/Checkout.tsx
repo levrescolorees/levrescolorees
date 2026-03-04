@@ -239,16 +239,34 @@ const Checkout = () => {
     setShippingLoading(true);
     setShippingError(null);
     try {
+      // Fetch real dimensions from Supabase for products that have UUID ids
+      const productIds = items.map(i => i.product.id).filter(id => id.length > 10);
+      let dimensionsMap: Record<string, { weight: number; height: number; width: number; length: number }> = {};
+      if (productIds.length > 0) {
+        const { data: dbProducts } = await supabase
+          .from('products')
+          .select('id, weight, height, width, length')
+          .in('id', productIds);
+        if (dbProducts) {
+          for (const p of dbProducts) {
+            dimensionsMap[p.id] = { weight: p.weight, height: p.height, width: p.width, length: p.length };
+          }
+        }
+      }
+
       const { data, error } = await supabase.functions.invoke('calculate-shipping', {
         body: {
           postal_code_to: raw,
-          products: items.map(item => ({
-            weight: (item.product as any).weight || 0.3,
-            height: (item.product as any).height || 2,
-            width: (item.product as any).width || 11,
-            length: (item.product as any).length || 16,
-            quantity: item.quantity,
-          })),
+          products: items.map(item => {
+            const dims = dimensionsMap[item.product.id];
+            return {
+              weight: dims?.weight || 0.3,
+              height: dims?.height || 2,
+              width: dims?.width || 11,
+              length: dims?.length || 16,
+              quantity: item.quantity,
+            };
+          }),
         },
       });
       if (error) throw error;
