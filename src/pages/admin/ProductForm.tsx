@@ -18,6 +18,7 @@ import SidebarCollections from '@/components/admin/product-editor/SidebarCollect
 import SidebarSEO from '@/components/admin/product-editor/SidebarSEO';
 import SidebarStock from '@/components/admin/product-editor/SidebarStock';
 import ProductPreviewDrawer from '@/components/admin/product-editor/ProductPreviewDrawer';
+import ShippingDimensionsCard from '@/components/admin/product-editor/ShippingDimensionsCard';
 
 interface FormData {
   name: string;
@@ -39,6 +40,10 @@ interface FormData {
   seo_title: string;
   meta_description: string;
   images: string[];
+  weight: string;
+  height: string;
+  width: string;
+  length: string;
 }
 
 const emptyForm: FormData = {
@@ -46,6 +51,7 @@ const emptyForm: FormData = {
   retail_price: '', cost_price: '0', stock: '0', badge: '', is_active: false,
   ideal_for_resale: false, suggested_margin: '0', rating: '0', reviews_count: '0',
   status: 'draft', published_at: null, seo_title: '', meta_description: '', images: [],
+  weight: '0', height: '0', width: '0', length: '0',
 };
 
 const ProductForm = () => {
@@ -81,6 +87,8 @@ const ProductForm = () => {
         status: product.status || 'draft', published_at: product.published_at || null,
         seo_title: product.seo_title || '', meta_description: product.meta_description || '',
         images: product.images || [],
+        weight: String((product as any).weight || 0), height: String((product as any).height || 0),
+        width: String((product as any).width || 0), length: String((product as any).length || 0),
       });
       const [{ data: vs }, { data: pr }, { data: colProds }] = await Promise.all([
         supabase.from('product_variants').select('*').eq('product_id', id).order('sort_order'),
@@ -135,6 +143,10 @@ const ProductForm = () => {
     seo_title: source.seo_title,
     meta_description: source.meta_description,
     images: source.images,
+    weight: parseFloat(source.weight) || 0,
+    height: parseFloat(source.height) || 0,
+    width: parseFloat(source.width) || 0,
+    length: parseFloat(source.length) || 0,
   });
 
   const saveProduct = useCallback(async (redirect = false, overrides?: Partial<FormData>) => {
@@ -337,6 +349,10 @@ const ProductForm = () => {
           />
           <VariantsCard variants={variants} onChange={setVariants} />
           <PriceRulesCard priceRules={priceRules} retailPrice={form.retail_price} onChange={setPriceRules} />
+          <ShippingDimensionsCard
+            weight={form.weight} height={form.height} width={form.width} length={form.length}
+            onChange={(f, v) => updateField(f, v)}
+          />
         </div>
 
         {/* Sidebar */}
