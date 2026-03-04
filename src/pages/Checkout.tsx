@@ -136,6 +136,12 @@ const Checkout = () => {
   const [cepLoading, setCepLoading] = useState(false);
   const [mpSdkReady, setMpSdkReady] = useState(false);
   const [trackingToken, setTrackingToken] = useState<string | null>(null);
+
+  // SuperFrete shipping
+  const [shippingOptions, setShippingOptions] = useState<{ id: string; name: string; company: string; price: number; delivery_time: number }[]>([]);
+  const [selectedShipping, setSelectedShipping] = useState<string | null>(null);
+  const [shippingLoading, setShippingLoading] = useState(false);
+  const [shippingError, setShippingError] = useState<string | null>(null);
   const [cardForm, setCardForm] = useState<CardForm>({
     cardNumber: '',
     cardholderName: '',
@@ -226,8 +232,51 @@ const Checkout = () => {
     document.head.appendChild(script);
   }, [mpPublicKey]);
 
-  // Shipping calculation
+  // Fetch SuperFrete shipping options when CEP is complete and moving to step 3
+  const fetchShippingOptions = useCallback(async () => {
+    const raw = form.zip.replace(/\D/g, '');
+    if (raw.length !== 8) return;
+    setShippingLoading(true);
+    setShippingError(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('calculate-shipping', {
+        body: {
+          postal_code_to: raw,
+          products: items.map(item => ({
+            weight: (item.product as any).weight || 0.3,
+            height: (item.product as any).height || 2,
+            width: (item.product as any).width || 11,
+            length: (item.product as any).length || 16,
+            quantity: item.quantity,
+          })),
+        },
+      });
+      if (error) throw error;
+      if (data?.options?.length) {
+        setShippingOptions(data.options);
+        setSelectedShipping(data.options[0].id);
+      } else {
+        setShippingOptions([]);
+        setSelectedShipping(null);
+        setShippingError('Nenhuma opção de frete disponível para este CEP.');
+      }
+    } catch (err) {
+      console.error('SuperFrete error:', err);
+      setShippingOptions([]);
+      setSelectedShipping(null);
+      setShippingError('Erro ao consultar frete. Usando cálculo padrão.');
+    } finally {
+      setShippingLoading(false);
+    }
+  }, [form.zip, items]);
+
+  // Shipping calculation — use SuperFrete if available, else fallback to static rules
   const shipping = useMemo(() => {
+    if (selectedShipping && shippingOptions.length) {
+      const opt = shippingOptions.find(o => o.id === selectedShipping);
+      if (opt) return opt.price;
+    }
+    // Fallback to static rules
     if (!shippingRules?.length) return totalSmart >= 299 ? 0 : 19.90;
     const freeRule = shippingRules.find(r => r.rule_type === 'free_above');
     if (freeRule?.min_order_for_free && totalSmart >= freeRule.min_order_for_free) return 0;
@@ -239,7 +288,7 @@ const Checkout = () => {
     const fixedRule = shippingRules.find(r => r.rule_type === 'fixed');
     if (fixedRule) return fixedRule.value;
     return 19.90;
-  }, [shippingRules, totalSmart, form.state]);
+  }, [shippingRules, totalSmart, form.state, selectedShipping, shippingOptions]);
 
   const couponDiscount = appliedCoupon
     ? appliedCoupon.discount_type === 'percentage'
@@ -649,7 +698,7 @@ const Checkout = () => {
                     <Button variant="outline" onClick={() => setStep(1)} className="font-body gap-2">
                       <ArrowLeft className="w-4 h-4" /> Voltar
                     </Button>
-                    <Button onClick={() => setStep(3)} disabled={!isStep2Valid} className="bg-gradient-rose text-primary-foreground font-body font-semibold shadow-rose gap-2">
+                    <Button onClick={() => { fetchShippingOptions(); setStep(3); }} disabled={!isStep2Valid} className="bg-gradient-rose text-primary-foreground font-body font-semibold shadow-rose gap-2">
                       PrÃ³ximo <ArrowRight className="w-4 h-4" />
                     </Button>
                   </div>
@@ -660,29 +709,66 @@ const Checkout = () => {
               {step === 3 && (
                 <motion.section key="step3" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="bg-card rounded-sm shadow-soft p-6 space-y-4">
                   <h2 className="font-display text-lg font-semibold text-foreground">Entrega</h2>
-                  <div className="bg-muted/30 rounded-sm p-4 space-y-2">
-                    <div className="flex items-center gap-3">
-                      <Truck className="w-5 h-5 text-primary" />
-                      <div>
-                        <p className="font-body text-sm font-semibold text-foreground">
-                          {shipping === 0 ? 'Frete GrÃ¡tis' : `Frete: ${formatCurrency(shipping)}`}
-                        </p>
-                        <p className="font-body text-xs text-muted-foreground">
-                          Entrega para {form.city}/{form.state} â€¢ CEP {form.zip}
-                        </p>
-                      </div>
+
+                  {shippingLoading && (
+                    <div className="flex items-center gap-2 text-sm font-body text-muted-foreground py-4">
+                      <Loader2 className="w-4 h-4 animate-spin text-primary" /> Consultando opções de frete...
                     </div>
-                    {shipping === 0 && (
-                      <p className="font-body text-xs text-primary">ðŸŽ‰ ParabÃ©ns! VocÃª ganhou frete grÃ¡tis neste pedido.</p>
-                    )}
-                  </div>
+                  )}
+
+                  {!shippingLoading && shippingOptions.length > 0 && (
+                    <div className="space-y-2">
+                      {shippingOptions.map(opt => (
+                        <label
+                          key={opt.id}
+                          onClick={() => setSelectedShipping(opt.id)}
+                          className={`flex items-center justify-between p-4 rounded-sm border-2 cursor-pointer transition-all ${
+                            selectedShipping === opt.id ? 'border-primary bg-primary/5' : 'border-border hover:border-muted-foreground'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <Truck className={`w-5 h-5 ${selectedShipping === opt.id ? 'text-primary' : 'text-muted-foreground'}`} />
+                            <div>
+                              <p className="font-body text-sm font-semibold text-foreground">{opt.name}</p>
+                              <p className="font-body text-xs text-muted-foreground">
+                                {opt.delivery_time > 0 ? `${opt.delivery_time} dias úteis` : 'Prazo a confirmar'} • {opt.company}
+                              </p>
+                            </div>
+                          </div>
+                          <span className="font-body text-sm font-bold text-foreground">{formatCurrency(opt.price)}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+
+                  {!shippingLoading && shippingOptions.length === 0 && (
+                    <div className="bg-muted/30 rounded-sm p-4 space-y-2">
+                      <div className="flex items-center gap-3">
+                        <Truck className="w-5 h-5 text-primary" />
+                        <div>
+                          <p className="font-body text-sm font-semibold text-foreground">
+                            {shipping === 0 ? 'Frete Grátis' : `Frete: ${formatCurrency(shipping)}`}
+                          </p>
+                          <p className="font-body text-xs text-muted-foreground">
+                            Entrega para {form.city}/{form.state} • CEP {form.zip}
+                          </p>
+                          {shippingError && (
+                            <p className="font-body text-xs text-amber-600 mt-1">{shippingError}</p>
+                          )}
+                        </div>
+                      </div>
+                      {shipping === 0 && (
+                        <p className="font-body text-xs text-primary">🎉 Parabéns! Você ganhou frete grátis neste pedido.</p>
+                      )}
+                    </div>
+                  )}
 
                   <div className="flex justify-between pt-2">
                     <Button variant="outline" onClick={() => setStep(2)} className="font-body gap-2">
                       <ArrowLeft className="w-4 h-4" /> Voltar
                     </Button>
                     <Button onClick={() => setStep(4)} className="bg-gradient-rose text-primary-foreground font-body font-semibold shadow-rose gap-2">
-                      PrÃ³ximo <ArrowRight className="w-4 h-4" />
+                      Próximo <ArrowRight className="w-4 h-4" />
                     </Button>
                   </div>
                 </motion.section>

@@ -484,10 +484,12 @@ export type Database = {
           cost_price: number
           created_at: string
           description: string
+          height: number
           id: string
           ideal_for_resale: boolean
           images: string[]
           is_active: boolean
+          length: number
           meta_description: string
           name: string
           published_at: string | null
@@ -502,16 +504,20 @@ export type Database = {
           stock: number
           suggested_margin: number
           updated_at: string
+          weight: number
+          width: number
         }
         Insert: {
           badge?: string | null
           cost_price?: number
           created_at?: string
           description?: string
+          height?: number
           id?: string
           ideal_for_resale?: boolean
           images?: string[]
           is_active?: boolean
+          length?: number
           meta_description?: string
           name: string
           published_at?: string | null
@@ -526,16 +532,20 @@ export type Database = {
           stock?: number
           suggested_margin?: number
           updated_at?: string
+          weight?: number
+          width?: number
         }
         Update: {
           badge?: string | null
           cost_price?: number
           created_at?: string
           description?: string
+          height?: number
           id?: string
           ideal_for_resale?: boolean
           images?: string[]
           is_active?: boolean
+          length?: number
           meta_description?: string
           name?: string
           published_at?: string | null
@@ -550,6 +560,8 @@ export type Database = {
           stock?: number
           suggested_margin?: number
           updated_at?: string
+          weight?: number
+          width?: number
         }
         Relationships: []
       }

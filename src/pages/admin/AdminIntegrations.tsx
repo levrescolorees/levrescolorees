@@ -1,5 +1,5 @@
-﻿import { useState, useEffect } from 'react';
-import { Save, CreditCard, CheckCircle2, AlertCircle, Eye, EyeOff } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Save, CreditCard, CheckCircle2, AlertCircle, Eye, EyeOff, Truck } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Input } from '@/components/ui/input';
@@ -19,6 +19,13 @@ interface MercadoPagoSettings {
   boleto_enabled?: boolean;
   max_installments?: number;
   webhook_secret?: string;
+}
+
+interface SuperFreteSettings {
+  enabled?: boolean;
+  environment?: 'sandbox' | 'production';
+  origin_zip?: string;
+  services?: string[];
 }
 
 const AdminIntegrations = () => {
@@ -79,13 +86,56 @@ const AdminIntegrations = () => {
     onError: () => toast.error('Erro ao salvar configuraÃ§Ãµes.'),
   });
 
+  // SuperFrete state
+  const [sfEnabled, setSfEnabled] = useState(false);
+  const [sfEnvironment, setSfEnvironment] = useState<'sandbox' | 'production'>('sandbox');
+  const [sfOriginZip, setSfOriginZip] = useState('');
+  const [sfServices, setSfServices] = useState<string[]>(['PAC', 'SEDEX', 'Mini Envios']);
+
+  useEffect(() => {
+    if (settings?.superfrete) {
+      const sf = settings.superfrete as SuperFreteSettings;
+      setSfEnabled(sf.enabled ?? false);
+      setSfEnvironment(sf.environment || 'sandbox');
+      setSfOriginZip(sf.origin_zip || '');
+      setSfServices(sf.services || ['PAC', 'SEDEX', 'Mini Envios']);
+    }
+  }, [settings]);
+
+  const saveSf = useMutation({
+    mutationFn: async () => {
+      const value = {
+        enabled: sfEnabled,
+        environment: sfEnvironment,
+        origin_zip: sfOriginZip,
+        services: sfServices,
+      };
+      const { error } = await supabase
+        .from('store_settings')
+        .upsert({ key: 'superfrete', value }, { onConflict: 'key' });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['store_settings'] });
+      qc.invalidateQueries({ queryKey: ['store_settings_admin'] });
+      toast.success('Configurações da SuperFrete salvas!');
+    },
+    onError: () => toast.error('Erro ao salvar configurações.'),
+  });
+
+  const toggleService = (service: string) => {
+    setSfServices(prev =>
+      prev.includes(service) ? prev.filter(s => s !== service) : [...prev, service]
+    );
+  };
+
   if (isLoading) {
     return <div className="flex items-center justify-center py-20 font-body text-muted-foreground">Carregando...</div>;
   }
 
   return (
     <div className="space-y-6">
-      <h1 className="font-display text-2xl font-bold text-foreground">IntegraÃ§Ãµes</h1>
+      <h1 className="font-display text-2xl font-bold text-foreground">Integrações</h1>
 
       {/* Mercado Pago Card */}
       <div className="bg-card rounded-lg shadow-soft p-6 space-y-6 max-w-2xl">
@@ -240,7 +290,85 @@ const AdminIntegrations = () => {
         </div>
 
         <Button onClick={() => saveMp.mutate()} disabled={saveMp.isPending} className="w-full sm:w-auto">
-          <Save className="w-4 h-4 mr-2" /> Salvar ConfiguraÃ§Ãµes
+          <Save className="w-4 h-4 mr-2" /> Salvar Configurações
+        </Button>
+      </div>
+
+      {/* SuperFrete Card */}
+      <div className="bg-card rounded-lg shadow-soft p-6 space-y-6 max-w-2xl">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+              <Truck className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <h2 className="font-display text-lg font-semibold text-foreground">SuperFrete</h2>
+              <p className="font-body text-xs text-muted-foreground">Cotação de frete em tempo real (PAC, Sedex, Mini Envios)</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {sfEnabled ? (
+              <span className="flex items-center gap-1 text-xs font-body text-green-600">
+                <CheckCircle2 className="w-3.5 h-3.5" /> Ativo
+              </span>
+            ) : (
+              <span className="flex items-center gap-1 text-xs font-body text-muted-foreground">
+                <AlertCircle className="w-3.5 h-3.5" /> Inativo
+              </span>
+            )}
+            <Switch checked={sfEnabled} onCheckedChange={setSfEnabled} />
+          </div>
+        </div>
+
+        <div className="border-t border-border pt-4 space-y-4">
+          {/* Environment */}
+          <div>
+            <label className="font-body text-sm font-medium text-foreground">Ambiente</label>
+            <Select value={sfEnvironment} onValueChange={(v: 'sandbox' | 'production') => setSfEnvironment(v)}>
+              <SelectTrigger className="mt-1 max-w-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="sandbox">🧪 Sandbox (Testes)</SelectItem>
+                <SelectItem value="production">🚀 Produção</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Origin ZIP */}
+          <div>
+            <label className="font-body text-sm font-medium text-foreground">CEP de Origem</label>
+            <Input
+              value={sfOriginZip}
+              onChange={e => setSfOriginZip(e.target.value.replace(/\D/g, '').slice(0, 8))}
+              placeholder="00000000"
+              className="font-body mt-1 max-w-xs"
+            />
+            <p className="font-body text-xs text-muted-foreground mt-1">
+              CEP de onde os produtos são enviados (sem traço)
+            </p>
+          </div>
+
+          {/* Services */}
+          <div>
+            <label className="font-body text-sm font-medium text-foreground mb-2 block">Serviços Habilitados</label>
+            <div className="space-y-3">
+              {['PAC', 'SEDEX', 'Mini Envios'].map(service => (
+                <label key={service} className="flex items-center justify-between bg-muted/30 rounded-md px-4 py-3 cursor-pointer">
+                  <span className="font-body text-sm text-foreground">{service}</span>
+                  <Switch checked={sfServices.includes(service)} onCheckedChange={() => toggleService(service)} />
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <p className="font-body text-xs text-muted-foreground">
+            O token de API da SuperFrete é armazenado como secret seguro no servidor. Para alterar, entre em contato com o suporte.
+          </p>
+        </div>
+
+        <Button onClick={() => saveSf.mutate()} disabled={saveSf.isPending} className="w-full sm:w-auto">
+          <Save className="w-4 h-4 mr-2" /> Salvar Configurações
         </Button>
       </div>
     </div>
