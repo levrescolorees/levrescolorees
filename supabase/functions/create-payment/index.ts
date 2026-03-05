@@ -808,8 +808,11 @@ Deno.serve(async req => {
 
     return jsonResponse(response, 200);
   } catch (error) {
+    const errorDetail = error instanceof Error
+      ? error.message
+      : (typeof error === 'object' && error !== null ? JSON.stringify(error) : String(error));
     slog(rid, 'error', 'Unhandled create-payment error', {
-      error: String(error),
+      error: errorDetail,
       ip: clientIp,
       idempotency_key: idempotencyKey || null,
     });
