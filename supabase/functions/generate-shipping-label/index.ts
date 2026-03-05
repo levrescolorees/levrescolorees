@@ -33,22 +33,32 @@ Deno.serve(async (req) => {
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    const supabaseAuth = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
+    // Allow service-role calls (e.g. from mp-webhook auto-generation)
+    const token = authHeader.replace("Bearer ", "");
+    const isServiceRole = token === supabaseServiceKey;
 
-    const { data: claimsData, error: claimsError } = await supabaseAuth.auth.getUser();
-    if (claimsError || !claimsData?.user) {
-      return jsonResponse({ error: "Não autorizado" }, 401);
-    }
+    let supabaseAdmin: ReturnType<typeof createClient>;
 
-    const userId = claimsData.user.id;
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+    if (isServiceRole) {
+      supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+    } else {
+      const supabaseAuth = createClient(supabaseUrl, supabaseAnonKey, {
+        global: { headers: { Authorization: authHeader } },
+      });
 
-    // Check if user is staff
-    const { data: isStaff } = await supabaseAdmin.rpc("is_admin_or_operador", { _user_id: userId });
-    if (!isStaff) {
-      return jsonResponse({ error: "Sem permissão" }, 403);
+      const { data: claimsData, error: claimsError } = await supabaseAuth.auth.getUser();
+      if (claimsError || !claimsData?.user) {
+        return jsonResponse({ error: "Não autorizado" }, 401);
+      }
+
+      const userId = claimsData.user.id;
+      supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+
+      // Check if user is staff
+      const { data: isStaff } = await supabaseAdmin.rpc("is_admin_or_operador", { _user_id: userId });
+      if (!isStaff) {
+        return jsonResponse({ error: "Sem permissão" }, 403);
+      }
     }
 
     const { order_id } = await req.json();
