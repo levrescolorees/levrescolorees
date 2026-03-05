@@ -22,13 +22,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [role, setRole] = useState<string | null>(null);
 
   const fetchRole = useCallback(async (userId: string) => {
-    const { data } = await supabase
-      .from('user_roles')
-      .select('role')
-      .eq('user_id', userId)
-      .limit(1)
-      .maybeSingle();
-    setRole(data?.role ?? null);
+    try {
+      const { data } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', userId)
+        .limit(1)
+        .maybeSingle();
+      setRole(data?.role ?? null);
+    } catch (err) {
+      console.error('[Auth] fetchRole failed:', err);
+      setRole(null);
+    }
   }, []);
 
   useEffect(() => {

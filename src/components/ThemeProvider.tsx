@@ -99,8 +99,13 @@ const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     const raw = settings?.theme;
     if (!raw) return;
-    const migrated = migrateTheme(raw);
-    setTheme(migrated);
+    try {
+      const migrated = migrateTheme(raw);
+      setTheme(migrated);
+    } catch (err) {
+      console.error('[ThemeProvider] migrateTheme failed, using default:', err);
+      setTheme(DEFAULT_THEME);
+    }
   }, [settings?.theme]);
 
   // Apply active theme
