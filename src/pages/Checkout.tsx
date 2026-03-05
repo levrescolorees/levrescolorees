@@ -460,6 +460,7 @@ const Checkout = () => {
           state: form.state.toUpperCase().trim().slice(0, 2),
         },
         payment_method: form.payment,
+        shipping_cost: shipping,
         coupon_code: appliedCoupon?.code || null,
         card_token: cardToken,
         installments: form.payment === 'card' ? cardForm.installments : undefined,

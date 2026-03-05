@@ -33,6 +33,7 @@ type PaymentPayload = {
     state: string;
   };
   payment_method: 'pix' | 'card' | 'boleto';
+  shipping_cost?: number;
   coupon_code?: string | null;
   card_token?: string | null;
   installments?: number;
@@ -529,7 +530,9 @@ Deno.serve(async req => {
       .order('sort_order');
 
     let shipping = 19.9;
-    if (shippingRules?.length) {
+    if (typeof payload.shipping_cost === 'number' && payload.shipping_cost >= 0 && payload.shipping_cost <= 500) {
+      shipping = payload.shipping_cost;
+    } else if (shippingRules?.length) {
       const freeRule = shippingRules.find(rule => rule.rule_type === 'free_above');
       if (freeRule?.min_order_for_free && subtotal >= Number(freeRule.min_order_for_free)) {
         shipping = 0;

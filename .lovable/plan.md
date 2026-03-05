@@ -1,41 +1,53 @@
 
 
-## Corrigir: Frete do SuperFrete não é enviado para a edge function de pagamento
+## Corrigir cálculo de frete SuperFrete — campo `services` obrigatório
 
 ### Problema
 
-O frontend calcula o frete corretamente (usando SuperFrete ou regras estáticas) e exibe no resumo do checkout. Porém, ao enviar o payload para `create-payment`, **o valor do frete selecionado não é incluído**. A edge function recalcula o frete usando apenas as `shipping_rules` estáticas do banco, ignorando completamente o preço do SuperFrete que o cliente viu e aceitou.
+Os logs da edge function `calculate-shipping` mostram erro 400 da API SuperFrete:
 
-Resultado: o Pix é gerado com valor menor (sem frete ou com frete diferente).
+```
+{"errors":{"services":["(services) é obrigatório."]},"message":"Ocorreu um ou mais erros."}
+```
+
+A API SuperFrete exige o campo `services` no body da requisição, indicando quais serviços cotar (ex: `1` para PAC, `2` para SEDEX, `17` para Mini Envios). A edge function atual não envia esse campo.
 
 ### Solução
 
-Enviar o valor do frete selecionado do frontend para o backend, e usá-lo na edge function.
+Atualizar `supabase/functions/calculate-shipping/index.ts` para incluir o campo `services` no body da requisição à API SuperFrete. O mapeamento correto dos serviços SuperFrete é:
 
-**1. Frontend — `src/pages/Checkout.tsx`**
-- Adicionar `shipping_cost` ao payload enviado para `create-payment` (linha ~437):
-  ```typescript
-  shipping_cost: shipping,  // valor do frete calculado (SuperFrete ou estático)
-  ```
+| Nome | Código |
+|------|--------|
+| PAC | 1 (ou "1") |
+| SEDEX | 2 (ou "2") |
+| Mini Envios | 17 (ou "17") |
 
-**2. Edge Function — `supabase/functions/create-payment/index.ts`**
-- Atualizar o tipo `PaymentPayload` para aceitar `shipping_cost?: number`
-- Na seção de cálculo de frete (linhas 525-548), usar `payload.shipping_cost` quando fornecido, com validação:
-  - Se `shipping_cost` for um número >= 0 e <= 500 (limite razoável), usar esse valor
-  - Caso contrário, manter o cálculo estático como fallback
-  ```typescript
-  let shipping = 19.9;
-  if (typeof payload.shipping_cost === 'number' && payload.shipping_cost >= 0 && payload.shipping_cost <= 500) {
-    shipping = payload.shipping_cost;
-  } else if (shippingRules?.length) {
-    // ... lógica estática existente
-  }
-  ```
+### Mudança
 
-### Arquivos
+**`supabase/functions/calculate-shipping/index.ts`**
+- Criar um mapeamento de nome de serviço → código numérico
+- Converter a lista `enabledServices` (ex: `["PAC", "SEDEX"]`) nos códigos correspondentes
+- Adicionar o campo `services` ao body enviado para `POST /api/v0/calculator`
 
-| Arquivo | Mudança |
-|---------|---------|
-| `src/pages/Checkout.tsx` | Adicionar `shipping_cost` ao payload |
-| `supabase/functions/create-payment/index.ts` | Aceitar e usar `shipping_cost` do payload com validação |
+```typescript
+const serviceMap: Record<string, string> = {
+  "PAC": "1",
+  "SEDEX": "2",
+  "MINI ENVIOS": "17",
+};
+
+const serviceCodes = enabledServices
+  .map(s => serviceMap[s.toUpperCase()])
+  .filter(Boolean)
+  .join(",");
+
+const body = {
+  from: { postal_code: originZip.replace(/\D/g, "") },
+  to: { postal_code: postal_code_to.replace(/\D/g, "") },
+  services: serviceCodes,  // <-- campo obrigatório
+  package: { weight, height, width, length },
+};
+```
+
+Apenas 1 arquivo alterado, apenas a edge function. Nenhuma mudança no frontend.
 
