@@ -461,6 +461,9 @@ const Checkout = () => {
         },
         payment_method: form.payment,
         shipping_cost: shipping,
+        shipping_method: selectedShipping && shippingOptions.length
+          ? (shippingOptions.find(o => o.id === selectedShipping)?.name || null)
+          : null,
         coupon_code: appliedCoupon?.code || null,
         card_token: cardToken,
         installments: form.payment === 'card' ? cardForm.installments : undefined,

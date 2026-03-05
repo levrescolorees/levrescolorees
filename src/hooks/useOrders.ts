@@ -42,6 +42,8 @@ export interface DBOrder {
   tracking_code: string | null;
   notes: string | null;
   shipping_address: Record<string, string> | null;
+  shipping_method: string | null;
+  shipping_label: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
   customer?: DBCustomer | null;
