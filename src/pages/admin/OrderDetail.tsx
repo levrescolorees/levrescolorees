@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Package, Truck, Clock } from 'lucide-react';
+import { ArrowLeft, Package, Truck, Clock, Tag, FileText, ExternalLink } from 'lucide-react';
 import {
-  useOrderDetail, useUpdateOrderStatus, useUpdateTracking,
+  useOrderDetail, useUpdateOrderStatus, useUpdateTracking, useGenerateShippingLabel,
   ORDER_STATUS_LABELS, ORDER_STATUS_COLORS,
 } from '@/hooks/useOrders';
 import { formatCurrency } from '@/hooks/useProducts';

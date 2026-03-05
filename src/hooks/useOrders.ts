@@ -164,6 +164,24 @@ export function useUpdateTracking() {
   });
 }
 
+export function useGenerateShippingLabel() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (orderId: string) => {
+      const { data, error } = await supabase.functions.invoke('generate-shipping-label', {
+        body: { order_id: orderId },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'orders'] });
+      qc.invalidateQueries({ queryKey: ['admin', 'order'] });
+    },
+  });
+}
+
 // ---- Customers ----
 
 export function useAdminCustomers() {
