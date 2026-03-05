@@ -1,53 +1,25 @@
 
 
-## Corrigir cálculo de frete SuperFrete — campo `services` obrigatório
+## Correção: Edge function `create-payment` não foi redeployada
 
 ### Problema
 
-Os logs da edge function `calculate-shipping` mostram erro 400 da API SuperFrete:
-
+Os logs mostram:
 ```
-{"errors":{"services":["(services) é obrigatório."]},"message":"Ocorreu um ou mais erros."}
+"error":"payload contem campos nao permitidos"
 ```
 
-A API SuperFrete exige o campo `services` no body da requisição, indicando quais serviços cotar (ex: `1` para PAC, `2` para SEDEX, `17` para Mini Envios). A edge function atual não envia esse campo.
+O checkout agora envia `shipping_cost` e `shipping_method` no payload, mas a versão **deployada** da edge function `create-payment` ainda não reconhece esses campos. O código foi editado corretamente, mas precisa ser redeployado.
 
 ### Solução
 
-Atualizar `supabase/functions/calculate-shipping/index.ts` para incluir o campo `services` no body da requisição à API SuperFrete. O mapeamento correto dos serviços SuperFrete é:
+Redeployar a edge function `create-payment` para que a versão com os campos `shipping_cost` e `shipping_method` na lista de campos permitidos entre em vigor.
 
-| Nome | Código |
-|------|--------|
-| PAC | 1 (ou "1") |
-| SEDEX | 2 (ou "2") |
-| Mini Envios | 17 (ou "17") |
+Nenhuma alteração de código é necessária — apenas redeploy da função existente.
 
-### Mudança
+### Arquivos
 
-**`supabase/functions/calculate-shipping/index.ts`**
-- Criar um mapeamento de nome de serviço → código numérico
-- Converter a lista `enabledServices` (ex: `["PAC", "SEDEX"]`) nos códigos correspondentes
-- Adicionar o campo `services` ao body enviado para `POST /api/v0/calculator`
-
-```typescript
-const serviceMap: Record<string, string> = {
-  "PAC": "1",
-  "SEDEX": "2",
-  "MINI ENVIOS": "17",
-};
-
-const serviceCodes = enabledServices
-  .map(s => serviceMap[s.toUpperCase()])
-  .filter(Boolean)
-  .join(",");
-
-const body = {
-  from: { postal_code: originZip.replace(/\D/g, "") },
-  to: { postal_code: postal_code_to.replace(/\D/g, "") },
-  services: serviceCodes,  // <-- campo obrigatório
-  package: { weight, height, width, length },
-};
-```
-
-Apenas 1 arquivo alterado, apenas a edge function. Nenhuma mudança no frontend.
+| Ação | Detalhe |
+|------|---------|
+| Redeploy | `supabase/functions/create-payment/index.ts` |
 
