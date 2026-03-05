@@ -188,7 +188,7 @@ Deno.serve(async (req) => {
         postal_code: (addr.zip || "").replace(/\D/g, ""),
         country_id: "BR",
       },
-      package: {
+      volumes: {
         weight: totalWeight,
         height: maxHeight,
         width: maxWidth,
@@ -204,7 +204,7 @@ Deno.serve(async (req) => {
 
     console.log("SuperFrete label request:", JSON.stringify(labelPayload));
 
-    const response = await fetch(`${baseUrl}/api/v0/order`, {
+    const response = await fetch(`${baseUrl}/api/v0/cart`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${superfreteToken}`,
