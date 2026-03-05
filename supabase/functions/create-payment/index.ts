@@ -766,6 +766,42 @@ Deno.serve(async req => {
         to_status: 'confirmado',
         note: 'Pagamento aprovado automaticamente',
       });
+
+      // Send confirmation email (fire-and-forget)
+      try {
+        const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+        const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+        await fetch(`${supabaseUrl}/functions/v1/send-email`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${supabaseKey}`,
+          },
+          body: JSON.stringify({
+            to: cleanEmail,
+            template: 'order_confirmed',
+            data: {
+              order_number: order.order_number,
+              customer_name: cleanName,
+              items: validatedItems.map(i => ({
+                product_name: i.product_name,
+                variant_name: i.variant_name,
+                quantity: i.quantity,
+                unit_price: i.unit_price,
+                total_price: i.unit_price * i.quantity,
+              })),
+              subtotal,
+              shipping,
+              discount: totalDiscount,
+              total,
+              payment_method: payload.payment_method,
+              shipping_address: shippingAddress,
+            },
+          }),
+        });
+      } catch (emailErr) {
+        slog(rid, 'warn', 'Failed to send confirmation email', { error: String(emailErr) });
+      }
     }
 
     const response: Record<string, unknown> = {
