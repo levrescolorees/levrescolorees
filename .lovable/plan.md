@@ -1,51 +1,53 @@
 
 
-## Gerar Etiqueta Automaticamente Após Pagamento Aprovado
+## Corrigir cálculo de frete SuperFrete — campo `services` obrigatório
 
-Atualmente o botão "Gerar Etiqueta" no admin é manual. A solução é adicionar a geração automática no webhook do Mercado Pago (`mp-webhook`), logo após o pagamento ser aprovado e o pedido mudar para status `confirmado`.
+### Problema
+
+Os logs da edge function `calculate-shipping` mostram erro 400 da API SuperFrete:
+
+```
+{"errors":{"services":["(services) é obrigatório."]},"message":"Ocorreu um ou mais erros."}
+```
+
+A API SuperFrete exige o campo `services` no body da requisição, indicando quais serviços cotar (ex: `1` para PAC, `2` para SEDEX, `17` para Mini Envios). A edge function atual não envia esse campo.
+
+### Solução
+
+Atualizar `supabase/functions/calculate-shipping/index.ts` para incluir o campo `services` no body da requisição à API SuperFrete. O mapeamento correto dos serviços SuperFrete é:
+
+| Nome | Código |
+|------|--------|
+| PAC | 1 (ou "1") |
+| SEDEX | 2 (ou "2") |
+| Mini Envios | 17 (ou "17") |
 
 ### Mudança
 
-**`supabase/functions/mp-webhook/index.ts`** (linhas ~284-294)
-
-Após o webhook atualizar o pedido para `confirmado`, chamar a edge function `generate-shipping-label` internamente (fetch para a própria Supabase):
+**`supabase/functions/calculate-shipping/index.ts`**
+- Criar um mapeamento de nome de serviço → código numérico
+- Converter a lista `enabledServices` (ex: `["PAC", "SEDEX"]`) nos códigos correspondentes
+- Adicionar o campo `services` ao body enviado para `POST /api/v0/calculator`
 
 ```typescript
-// After updating order to 'confirmado', auto-generate shipping label
-if (mapped.order === 'confirmado') {
-  try {
-    const labelRes = await fetch(
-      `${Deno.env.get('SUPABASE_URL')}/functions/v1/generate-shipping-label`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
-        },
-        body: JSON.stringify({ order_id: orderId }),
-      }
-    );
-    const labelData = await labelRes.json();
-    slog(rid, 'info', 'Auto label generation', { 
-      order_id: orderId, 
-      success: labelRes.ok,
-      tracking: labelData?.label?.tracking_code 
-    });
-  } catch (labelErr) {
-    slog(rid, 'warn', 'Auto label generation failed', { 
-      order_id: orderId, 
-      error: String(labelErr) 
-    });
-    // Non-blocking: label can still be generated manually
-  }
-}
+const serviceMap: Record<string, string> = {
+  "PAC": "1",
+  "SEDEX": "2",
+  "MINI ENVIOS": "17",
+};
+
+const serviceCodes = enabledServices
+  .map(s => serviceMap[s.toUpperCase()])
+  .filter(Boolean)
+  .join(",");
+
+const body = {
+  from: { postal_code: originZip.replace(/\D/g, "") },
+  to: { postal_code: postal_code_to.replace(/\D/g, "") },
+  services: serviceCodes,  // <-- campo obrigatório
+  package: { weight, height, width, length },
+};
 ```
 
-O botão manual no admin continuara funcionando como fallback caso a geração automática falhe (ex: saldo insuficiente na SuperFrete, dados incompletos).
-
-### Arquivos
-
-| Arquivo | Mudança |
-|---------|---------|
-| `supabase/functions/mp-webhook/index.ts` | Adicionar chamada automática para `generate-shipping-label` após pagamento aprovado |
+Apenas 1 arquivo alterado, apenas a edge function. Nenhuma mudança no frontend.
 

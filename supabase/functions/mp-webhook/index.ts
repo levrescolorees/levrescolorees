@@ -293,6 +293,34 @@ Deno.serve(async req => {
 
     await supabaseAdmin.from('orders').update(updatePayload).eq('id', orderId);
 
+    // Auto-generate shipping label when payment is approved
+    if (mapped.order === 'confirmado') {
+      try {
+        const labelRes = await fetch(
+          `${Deno.env.get('SUPABASE_URL')}/functions/v1/generate-shipping-label`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+            },
+            body: JSON.stringify({ order_id: orderId }),
+          }
+        );
+        const labelData = await labelRes.json();
+        slog(rid, 'info', 'Auto label generation', {
+          order_id: orderId,
+          success: labelRes.ok,
+          tracking: labelData?.label?.tracking_code,
+        });
+      } catch (labelErr) {
+        slog(rid, 'warn', 'Auto label generation failed', {
+          order_id: orderId,
+          error: String(labelErr),
+        });
+      }
+    }
+
     slog(rid, 'info', 'Webhook processed', {
       order_id: orderId,
       payment_id: paymentId,
