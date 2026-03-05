@@ -1,62 +1,53 @@
 
 
-## Auditoria: Geração de Etiqueta de Envio (SuperFrete)
+## Corrigir cálculo de frete SuperFrete — campo `services` obrigatório
 
-### Situação Atual
+### Problema
 
-Após revisar todo o código do projeto, **não existe nenhuma funcionalidade de geração de etiqueta de envio**. O fluxo atual é:
+Os logs da edge function `calculate-shipping` mostram erro 400 da API SuperFrete:
 
-1. **Checkout**: cliente calcula frete via SuperFrete (endpoint `calculate-shipping`) → apenas **cotação de preço**
-2. **Pedido criado**: salvo no banco com valor do frete
-3. **Admin → Detalhe do Pedido**: o admin pode manualmente digitar um código de rastreio e atualizar o status
+```
+{"errors":{"services":["(services) é obrigatório."]},"message":"Ocorreu um ou mais erros."}
+```
 
-**O que falta**: Após o pedido ser confirmado/pago, não há integração com a API SuperFrete para **gerar a etiqueta de envio** (`POST /api/v0/order`). Hoje o admin precisaria ir ao painel da SuperFrete manualmente, criar a etiqueta lá, e voltar para colar o código de rastreio.
+A API SuperFrete exige o campo `services` no body da requisição, indicando quais serviços cotar (ex: `1` para PAC, `2` para SEDEX, `17` para Mini Envios). A edge function atual não envia esse campo.
 
-### Plano: Integrar Geração de Etiqueta SuperFrete
+### Solução
 
-**1. Nova Edge Function `generate-shipping-label`**
+Atualizar `supabase/functions/calculate-shipping/index.ts` para incluir o campo `services` no body da requisição à API SuperFrete. O mapeamento correto dos serviços SuperFrete é:
 
-Cria a etiqueta via API SuperFrete (`POST /api/v0/order`) com os dados do pedido:
-- Dados do destinatário (nome, endereço, CEP)
-- Dados do remetente (CEP de origem das configurações)
-- Dimensões/peso dos produtos do pedido
-- Serviço selecionado (PAC/SEDEX/Mini Envios)
-- Retorna: URL da etiqueta, código de rastreio, ID da ordem SuperFrete
+| Nome | Código |
+|------|--------|
+| PAC | 1 (ou "1") |
+| SEDEX | 2 (ou "2") |
+| Mini Envios | 17 (ou "17") |
 
-**2. Salvar dados da etiqueta no pedido**
+### Mudança
 
-Adicionar coluna `shipping_label` (jsonb) na tabela `orders` para armazenar:
-- `superfrete_order_id`
-- `tracking_code`
-- `label_url` (URL do PDF da etiqueta)
-- `service_name`
-- `status`
+**`supabase/functions/calculate-shipping/index.ts`**
+- Criar um mapeamento de nome de serviço → código numérico
+- Converter a lista `enabledServices` (ex: `["PAC", "SEDEX"]`) nos códigos correspondentes
+- Adicionar o campo `services` ao body enviado para `POST /api/v0/calculator`
 
-**3. Salvar serviço de frete selecionado no checkout**
+```typescript
+const serviceMap: Record<string, string> = {
+  "PAC": "1",
+  "SEDEX": "2",
+  "MINI ENVIOS": "17",
+};
 
-Atualmente o checkout não salva qual serviço de frete o cliente escolheu (PAC, SEDEX, etc.). Precisamos salvar `shipping_method` (nome do serviço) junto com o pedido para saber qual etiqueta gerar.
+const serviceCodes = enabledServices
+  .map(s => serviceMap[s.toUpperCase()])
+  .filter(Boolean)
+  .join(",");
 
-**4. Botão "Gerar Etiqueta" no Admin → Detalhe do Pedido**
+const body = {
+  from: { postal_code: originZip.replace(/\D/g, "") },
+  to: { postal_code: postal_code_to.replace(/\D/g, "") },
+  services: serviceCodes,  // <-- campo obrigatório
+  package: { weight, height, width, length },
+};
+```
 
-Quando o pedido estiver com status `confirmado` ou `preparando`:
-- Botão "Gerar Etiqueta SuperFrete"
-- Chama a edge function
-- Exibe link para download do PDF da etiqueta
-- Preenche automaticamente o código de rastreio
-
-### Arquivos
-
-| Arquivo | Mudança |
-|---------|---------|
-| Migration SQL | Adicionar coluna `shipping_label` (jsonb) e `shipping_method` (text) na tabela `orders` |
-| `src/pages/Checkout.tsx` | Salvar `shipping_method` no payload |
-| `supabase/functions/create-payment/index.ts` | Aceitar e salvar `shipping_method` |
-| `supabase/functions/generate-shipping-label/index.ts` | **Nova** — gerar etiqueta via SuperFrete API |
-| `supabase/config.toml` | Registrar nova function |
-| `src/pages/admin/OrderDetail.tsx` | Botão "Gerar Etiqueta" + exibir link da etiqueta |
-| `src/hooks/useOrders.ts` | Mutation para gerar etiqueta |
-
-### Observação Importante
-
-A API de geração de etiqueta da SuperFrete (`/api/v0/order`) requer que a conta tenha saldo ou créditos. Em ambiente sandbox funciona sem custo para testes.
+Apenas 1 arquivo alterado, apenas a edge function. Nenhuma mudança no frontend.
 

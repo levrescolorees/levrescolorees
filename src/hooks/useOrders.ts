@@ -42,6 +42,8 @@ export interface DBOrder {
   tracking_code: string | null;
   notes: string | null;
   shipping_address: Record<string, string> | null;
+  shipping_method: string | null;
+  shipping_label: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
   customer?: DBCustomer | null;
@@ -154,6 +156,24 @@ export function useUpdateTracking() {
       if (error) throw error;
 
       // Email is now handled by database trigger → email_outbox → email-worker
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'orders'] });
+      qc.invalidateQueries({ queryKey: ['admin', 'order'] });
+    },
+  });
+}
+
+export function useGenerateShippingLabel() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (orderId: string) => {
+      const { data, error } = await supabase.functions.invoke('generate-shipping-label', {
+        body: { order_id: orderId },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin', 'orders'] });
