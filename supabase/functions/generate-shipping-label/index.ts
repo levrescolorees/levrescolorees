@@ -229,24 +229,87 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Erro ao gerar etiqueta na SuperFrete", details: result }, 502);
     }
 
+    const superfreteOrderId = result.id || null;
+
+    // Step 2: Auto-pay the label using account balance via checkout endpoint
+    let checkoutResult: any = null;
+    if (superfreteOrderId) {
+      try {
+        const checkoutRes = await fetch(`${baseUrl}/api/v0/checkout`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${superfreteToken}`,
+            "Content-Type": "application/json",
+            "User-Agent": "LevresApp/1.0",
+            Accept: "application/json",
+          },
+          body: JSON.stringify({ orders: [superfreteOrderId] }),
+        });
+
+        const checkoutText = await checkoutRes.text();
+        console.log("SuperFrete checkout response:", checkoutRes.status, checkoutText);
+
+        try {
+          checkoutResult = JSON.parse(checkoutText);
+        } catch {
+          console.warn("SuperFrete checkout response not JSON:", checkoutText);
+        }
+
+        if (!checkoutRes.ok) {
+          console.warn("SuperFrete checkout failed (label created but not paid):", checkoutResult);
+        }
+      } catch (checkoutErr) {
+        console.warn("SuperFrete checkout error:", checkoutErr);
+      }
+    }
+
+    // Determine final status: if checkout succeeded, status should be "released"
+    const isPaid = checkoutResult && !checkoutResult.error;
+    const finalStatus = isPaid ? "released" : (result.status || "pending");
+
+    // After checkout, tracking may be available - re-fetch order info if paid
+    let trackingCode = result.tracking || null;
+    let labelUrl = result.print?.url || null;
+
+    if (isPaid && superfreteOrderId) {
+      try {
+        const infoRes = await fetch(`${baseUrl}/api/v0/order/info/${superfreteOrderId}`, {
+          headers: {
+            Authorization: `Bearer ${superfreteToken}`,
+            "User-Agent": "LevresApp/1.0",
+            Accept: "application/json",
+          },
+        });
+        if (infoRes.ok) {
+          const infoData = await infoRes.json();
+          trackingCode = infoData.tracking || trackingCode;
+          labelUrl = infoData.print?.url || labelUrl;
+          console.log("SuperFrete order info after checkout:", JSON.stringify(infoData));
+        }
+      } catch (infoErr) {
+        console.warn("Failed to fetch order info after checkout:", infoErr);
+      }
+    }
+
     // Save label data to order
     const labelData = {
-      superfrete_order_id: result.id || null,
-      tracking_code: result.tracking || null,
-      label_url: result.print?.url || null,
+      superfrete_order_id: superfreteOrderId,
+      tracking_code: trackingCode,
+      label_url: labelUrl,
       service_name: shippingMethod,
-      status: result.status || "created",
+      status: finalStatus,
+      paid: isPaid,
       created_at: new Date().toISOString(),
       raw: result,
+      checkout_raw: checkoutResult,
     };
 
     const updatePayload: Record<string, unknown> = {
       shipping_label: labelData,
     };
 
-    // Auto-fill tracking code if available
-    if (result.tracking) {
-      updatePayload.tracking_code = result.tracking;
+    if (trackingCode) {
+      updatePayload.tracking_code = trackingCode;
     }
 
     await supabaseAdmin
@@ -256,6 +319,7 @@ Deno.serve(async (req) => {
 
     return jsonResponse({
       success: true,
+      paid: isPaid,
       label: labelData,
     });
   } catch (error) {
