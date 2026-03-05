@@ -50,6 +50,33 @@ export type Database = {
         }
         Relationships: []
       }
+      checkout_idempotency: {
+        Row: {
+          created_at: string
+          expires_at: string
+          idempotency_key: string
+          request_fingerprint: string
+          response_payload: Json | null
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at?: string
+          idempotency_key: string
+          request_fingerprint: string
+          response_payload?: Json | null
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          idempotency_key?: string
+          request_fingerprint?: string
+          response_payload?: Json | null
+          status?: string
+        }
+        Relationships: []
+      }
       collection_products: {
         Row: {
           collection_id: string
