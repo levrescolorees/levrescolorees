@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Instagram, Mail } from 'lucide-react';
+import { APP_VERSION } from '@/lib/version';
 import { useStoreSettings } from '@/hooks/useStoreSettings';
 
 const Footer = () => {
