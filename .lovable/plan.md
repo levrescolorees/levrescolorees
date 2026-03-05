@@ -1,53 +1,30 @@
 
 
-## Corrigir cálculo de frete SuperFrete — campo `services` obrigatório
+## Correção: Endpoint e payload da SuperFrete estão errados
 
-### Problema
+### Problema identificado
 
-Os logs da edge function `calculate-shipping` mostram erro 400 da API SuperFrete:
+Os logs mostram que a SuperFrete retorna **HTML** (a página web do painel) em vez de JSON. Isso acontece porque:
 
-```
-{"errors":{"services":["(services) é obrigatório."]},"message":"Ocorreu um ou mais erros."}
-```
+1. **Endpoint errado**: o código usa `/api/v0/order` mas o endpoint correto é **`/api/v0/cart`**
+2. **Campo de dimensões errado**: o código envia `package` mas o campo correto é **`volumes`**
 
-A API SuperFrete exige o campo `services` no body da requisição, indicando quais serviços cotar (ex: `1` para PAC, `2` para SEDEX, `17` para Mini Envios). A edge function atual não envia esse campo.
+### Correção
 
-### Solução
+**`supabase/functions/generate-shipping-label/index.ts`**
 
-Atualizar `supabase/functions/calculate-shipping/index.ts` para incluir o campo `services` no body da requisição à API SuperFrete. O mapeamento correto dos serviços SuperFrete é:
+| Item | Atual (errado) | Correto |
+|------|----------------|---------|
+| Endpoint | `/api/v0/order` | `/api/v0/cart` |
+| Campo dimensões | `package: { weight, height, width, length }` | `volumes: { weight, height, width, length }` |
 
-| Nome | Código |
-|------|--------|
-| PAC | 1 (ou "1") |
-| SEDEX | 2 (ou "2") |
-| Mini Envios | 17 (ou "17") |
+### Observação importante da documentação
 
-### Mudança
+A etiqueta é criada com status **"pending"** (aguardando pagamento na SuperFrete). O código de rastreio só fica disponível quando o status muda para **"released"** (após pagar a etiqueta no painel SuperFrete ou via API de checkout). Ou seja, o fluxo completo é:
 
-**`supabase/functions/calculate-shipping/index.ts`**
-- Criar um mapeamento de nome de serviço → código numérico
-- Converter a lista `enabledServices` (ex: `["PAC", "SEDEX"]`) nos códigos correspondentes
-- Adicionar o campo `services` ao body enviado para `POST /api/v0/calculator`
+1. `POST /api/v0/cart` → cria etiqueta com status "pending"
+2. Pagar a etiqueta (painel SuperFrete ou API `/api/v1/integration/checkout`)
+3. Após pagamento, status muda para "released" e o tracking code fica disponível
 
-```typescript
-const serviceMap: Record<string, string> = {
-  "PAC": "1",
-  "SEDEX": "2",
-  "MINI ENVIOS": "17",
-};
-
-const serviceCodes = enabledServices
-  .map(s => serviceMap[s.toUpperCase()])
-  .filter(Boolean)
-  .join(",");
-
-const body = {
-  from: { postal_code: originZip.replace(/\D/g, "") },
-  to: { postal_code: postal_code_to.replace(/\D/g, "") },
-  services: serviceCodes,  // <-- campo obrigatório
-  package: { weight, height, width, length },
-};
-```
-
-Apenas 1 arquivo alterado, apenas a edge function. Nenhuma mudança no frontend.
+O código atual tenta pegar o tracking_code na resposta do POST, mas ele só estará disponível após o pagamento da etiqueta.
 
