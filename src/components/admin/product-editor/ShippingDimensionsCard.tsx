@@ -24,14 +24,14 @@ const ShippingDimensionsCard = ({ weight, height, width, length, onChange }: Pro
         </p>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div>
-            <label className="font-body text-xs font-medium text-foreground">Peso (kg)</label>
+            <label className="font-body text-xs font-medium text-foreground">Peso (g)</label>
             <Input
               type="number"
-              step="0.01"
+              step="1"
               min="0"
               value={weight}
               onChange={e => onChange('weight', e.target.value)}
-              placeholder="0.30"
+              placeholder="300"
               className="font-body mt-1"
             />
           </div>
