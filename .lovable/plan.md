@@ -1,37 +1,53 @@
 
 
-## Diagnóstico e Correção: Erro ao Navegar no Admin
+## Corrigir cálculo de frete SuperFrete — campo `services` obrigatório
 
 ### Problema
 
-A Isabela vê a tela "Algo deu errado" ao navegar entre menus do admin. O ErrorBoundary está capturando o erro, porém **não exibe qual erro é**, impossibilitando o diagnóstico remoto.
+Os logs da edge function `calculate-shipping` mostram erro 400 da API SuperFrete:
 
-### Causa Provável
+```
+{"errors":{"services":["(services) é obrigatório."]},"message":"Ocorreu um ou mais erros."}
+```
 
-O ErrorBoundary atual é um **class component** que captura erros no `render`. Porém, quando o React Router troca de rota, **o ErrorBoundary não reseta seu estado** — uma vez que captura um erro, ele permanece na tela de erro para TODAS as rotas seguintes. Isso explica "toda vez que ela tenta mudar de menu".
+A API SuperFrete exige o campo `services` no body da requisição, indicando quais serviços cotar (ex: `1` para PAC, `2` para SEDEX, `17` para Mini Envios). A edge function atual não envia esse campo.
 
-Além disso, sem ver a mensagem do erro, não sabemos se é um problema de dados (RLS/query), componente corrompido, ou outra coisa.
+### Solução
 
-### Plano
+Atualizar `supabase/functions/calculate-shipping/index.ts` para incluir o campo `services` no body da requisição à API SuperFrete. O mapeamento correto dos serviços SuperFrete é:
 
-**1. Adicionar reset automático por rota no ErrorBoundary**
-- Receber a `location.pathname` como `key` prop para que o React recrie o boundary a cada troca de rota
-- Isso permite que ao navegar para outra página, o erro anterior seja descartado
+| Nome | Código |
+|------|--------|
+| PAC | 1 (ou "1") |
+| SEDEX | 2 (ou "2") |
+| Mini Envios | 17 (ou "17") |
 
-**2. Mostrar detalhes do erro no fallback**
-- Adicionar seção colapsável "Detalhes técnicos" com `error.message` e stack trace
-- Isso permite diagnóstico remoto sem precisar abrir DevTools
-- Mostrar a versão do app (`APP_VERSION`) no fallback
+### Mudança
 
-**3. Envolver o `<Outlet>` do AdminLayout com ErrorBoundary por rota**
-- Adicionar um ErrorBoundary **dentro** do AdminLayout que envolve apenas o `<Outlet>`
-- Usar `useLocation().pathname` como key para resetar a cada navegação
-- Assim, se uma página admin crashar, o sidebar continua visível e funcional
+**`supabase/functions/calculate-shipping/index.ts`**
+- Criar um mapeamento de nome de serviço → código numérico
+- Converter a lista `enabledServices` (ex: `["PAC", "SEDEX"]`) nos códigos correspondentes
+- Adicionar o campo `services` ao body enviado para `POST /api/v0/calculator`
 
-### Arquivos Alterados
+```typescript
+const serviceMap: Record<string, string> = {
+  "PAC": "1",
+  "SEDEX": "2",
+  "MINI ENVIOS": "17",
+};
 
-| Arquivo | Mudança |
-|---------|---------|
-| `src/components/ErrorBoundary.tsx` | Adicionar detalhes do erro e versão no fallback |
-| `src/pages/admin/AdminLayout.tsx` | Envolver `<Outlet>` com ErrorBoundary keyed por rota |
+const serviceCodes = enabledServices
+  .map(s => serviceMap[s.toUpperCase()])
+  .filter(Boolean)
+  .join(",");
+
+const body = {
+  from: { postal_code: originZip.replace(/\D/g, "") },
+  to: { postal_code: postal_code_to.replace(/\D/g, "") },
+  services: serviceCodes,  // <-- campo obrigatório
+  package: { weight, height, width, length },
+};
+```
+
+Apenas 1 arquivo alterado, apenas a edge function. Nenhuma mudança no frontend.
 
