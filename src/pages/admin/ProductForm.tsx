@@ -87,7 +87,7 @@ const ProductForm = () => {
         status: product.status || 'draft', published_at: product.published_at || null,
         seo_title: product.seo_title || '', meta_description: product.meta_description || '',
         images: product.images || [],
-        weight: String((product as any).weight || 0), height: String((product as any).height || 0),
+        weight: String(Math.round(((product as any).weight || 0) * 1000)), height: String((product as any).height || 0),
         width: String((product as any).width || 0), length: String((product as any).length || 0),
       });
       const [{ data: vs }, { data: pr }, { data: colProds }] = await Promise.all([
@@ -143,7 +143,7 @@ const ProductForm = () => {
     seo_title: source.seo_title,
     meta_description: source.meta_description,
     images: source.images,
-    weight: parseFloat(source.weight) || 0,
+    weight: (parseFloat(source.weight) || 0) / 1000,
     height: parseFloat(source.height) || 0,
     width: parseFloat(source.width) || 0,
     length: parseFloat(source.length) || 0,
