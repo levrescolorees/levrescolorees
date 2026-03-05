@@ -1,13 +1,15 @@
 import { useEffect, Suspense } from 'react';
-import { Outlet, useNavigate } from 'react-router-dom';
+import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { AdminSidebar } from '@/components/admin/AdminSidebar';
 import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Loader2 } from 'lucide-react';
 
 const AdminLayout = () => {
   const { user, loading, isStaff } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     if (!loading && !user) {
@@ -41,9 +43,11 @@ const AdminLayout = () => {
             <h1 className="font-body text-sm font-medium text-foreground">Painel Administrativo</h1>
           </header>
           <main className="flex-1 p-6 bg-muted/30 overflow-auto">
-            <Suspense fallback={<div className="flex-1 flex items-center justify-center p-8"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>}>
-              <Outlet />
-            </Suspense>
+            <ErrorBoundary key={location.pathname}>
+              <Suspense fallback={<div className="flex-1 flex items-center justify-center p-8"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>}>
+                <Outlet />
+              </Suspense>
+            </ErrorBoundary>
           </main>
         </div>
       </div>
