@@ -1,43 +1,53 @@
 
 
-## Correção: Tabela `checkout_idempotency` não existe
+## Corrigir cálculo de frete SuperFrete — campo `services` obrigatório
 
 ### Problema
 
-Os logs mostram claramente:
+Os logs da edge function `calculate-shipping` mostram erro 400 da API SuperFrete:
 
 ```
-Could not find the table 'public.checkout_idempotency' in the schema cache
+{"errors":{"services":["(services) é obrigatório."]},"message":"Ocorreu um ou mais erros."}
 ```
 
-A edge function `create-payment` referencia a tabela `checkout_idempotency` para controle de idempotência (evitar pagamentos duplicados), mas essa tabela nunca foi criada no banco.
+A API SuperFrete exige o campo `services` no body da requisição, indicando quais serviços cotar (ex: `1` para PAC, `2` para SEDEX, `17` para Mini Envios). A edge function atual não envia esse campo.
 
 ### Solução
 
-Criar a tabela `checkout_idempotency` via migration SQL com as colunas que a edge function espera:
+Atualizar `supabase/functions/calculate-shipping/index.ts` para incluir o campo `services` no body da requisição à API SuperFrete. O mapeamento correto dos serviços SuperFrete é:
 
-```sql
-CREATE TABLE public.checkout_idempotency (
-  idempotency_key text PRIMARY KEY,
-  request_fingerprint text NOT NULL,
-  status text NOT NULL DEFAULT 'processing',
-  response_payload jsonb,
-  expires_at timestamptz NOT NULL DEFAULT (now() + interval '24 hours'),
-  created_at timestamptz NOT NULL DEFAULT now()
-);
+| Nome | Código |
+|------|--------|
+| PAC | 1 (ou "1") |
+| SEDEX | 2 (ou "2") |
+| Mini Envios | 17 (ou "17") |
 
-ALTER TABLE public.checkout_idempotency ENABLE ROW LEVEL SECURITY;
+### Mudança
 
--- Nenhuma policy de SELECT/UPDATE/DELETE para anon — apenas a service_role (usada pela edge function) acessa
+**`supabase/functions/calculate-shipping/index.ts`**
+- Criar um mapeamento de nome de serviço → código numérico
+- Converter a lista `enabledServices` (ex: `["PAC", "SEDEX"]`) nos códigos correspondentes
+- Adicionar o campo `services` ao body enviado para `POST /api/v0/calculator`
+
+```typescript
+const serviceMap: Record<string, string> = {
+  "PAC": "1",
+  "SEDEX": "2",
+  "MINI ENVIOS": "17",
+};
+
+const serviceCodes = enabledServices
+  .map(s => serviceMap[s.toUpperCase()])
+  .filter(Boolean)
+  .join(",");
+
+const body = {
+  from: { postal_code: originZip.replace(/\D/g, "") },
+  to: { postal_code: postal_code_to.replace(/\D/g, "") },
+  services: serviceCodes,  // <-- campo obrigatório
+  package: { weight, height, width, length },
+};
 ```
 
-Nenhuma RLS policy pública é necessária pois a edge function usa `SUPABASE_SERVICE_ROLE_KEY` que bypassa RLS.
-
-### Arquivos
-
-| Mudança | Detalhe |
-|---------|---------|
-| Migration SQL | Criar tabela `checkout_idempotency` |
-
-Nenhuma alteração de código — apenas criação da tabela que já é referenciada.
+Apenas 1 arquivo alterado, apenas a edge function. Nenhuma mudança no frontend.
 
