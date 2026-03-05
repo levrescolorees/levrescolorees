@@ -134,36 +134,7 @@ export function useUpdateOrderStatus() {
         });
       if (hErr) throw hErr;
 
-      // Send status update email (fire-and-forget)
-      try {
-        const { data: order } = await supabase
-          .from('orders')
-          .select('order_number, customers(name, email)')
-          .eq('id', orderId)
-          .single();
-        
-        if (order) {
-          const customer = (order as any).customers;
-          if (customer?.email) {
-            const siteUrl = window.location.origin;
-            await supabase.functions.invoke('send-email', {
-              body: {
-                to: customer.email,
-                template: 'status_updated',
-                data: {
-                  order_number: order.order_number,
-                  new_status: toStatus,
-                  customer_name: customer.name,
-                  note: note || null,
-                  tracking_url: `${siteUrl}/rastreio`,
-                },
-              },
-            });
-          }
-        }
-      } catch (emailErr) {
-        console.warn('Failed to send status email:', emailErr);
-      }
+      // Email is now handled by database trigger → email_outbox → email-worker
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin', 'orders'] });
@@ -182,35 +153,7 @@ export function useUpdateTracking() {
         .eq('id', orderId);
       if (error) throw error;
 
-      // Send tracking email (fire-and-forget)
-      try {
-        const { data: order } = await supabase
-          .from('orders')
-          .select('order_number, customers(name, email)')
-          .eq('id', orderId)
-          .single();
-        
-        if (order) {
-          const customer = (order as any).customers;
-          if (customer?.email) {
-            const siteUrl = window.location.origin;
-            await supabase.functions.invoke('send-email', {
-              body: {
-                to: customer.email,
-                template: 'tracking_sent',
-                data: {
-                  order_number: order.order_number,
-                  tracking_code: trackingCode,
-                  customer_name: customer.name,
-                  tracking_url: `${siteUrl}/rastreio`,
-                },
-              },
-            });
-          }
-        }
-      } catch (emailErr) {
-        console.warn('Failed to send tracking email:', emailErr);
-      }
+      // Email is now handled by database trigger → email_outbox → email-worker
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin', 'orders'] });

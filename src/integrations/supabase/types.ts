@@ -229,6 +229,95 @@ export type Database = {
         }
         Relationships: []
       }
+      email_delivery_events: {
+        Row: {
+          created_at: string
+          event_type: string
+          id: string
+          outbox_id: string
+          raw_payload: Json
+        }
+        Insert: {
+          created_at?: string
+          event_type: string
+          id?: string
+          outbox_id: string
+          raw_payload?: Json
+        }
+        Update: {
+          created_at?: string
+          event_type?: string
+          id?: string
+          outbox_id?: string
+          raw_payload?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_delivery_events_outbox_id_fkey"
+            columns: ["outbox_id"]
+            isOneToOne: false
+            referencedRelation: "email_outbox"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      email_outbox: {
+        Row: {
+          attempts: number
+          created_at: string
+          entity_id: string | null
+          event_type: string
+          id: string
+          idempotency_key: string
+          last_error: string | null
+          max_attempts: number
+          next_attempt_at: string
+          payload: Json
+          provider: string
+          provider_message_id: string | null
+          status: string
+          template_key: string
+          to_email: string
+          updated_at: string
+        }
+        Insert: {
+          attempts?: number
+          created_at?: string
+          entity_id?: string | null
+          event_type: string
+          id?: string
+          idempotency_key: string
+          last_error?: string | null
+          max_attempts?: number
+          next_attempt_at?: string
+          payload?: Json
+          provider?: string
+          provider_message_id?: string | null
+          status?: string
+          template_key: string
+          to_email: string
+          updated_at?: string
+        }
+        Update: {
+          attempts?: number
+          created_at?: string
+          entity_id?: string | null
+          event_type?: string
+          id?: string
+          idempotency_key?: string
+          last_error?: string | null
+          max_attempts?: number
+          next_attempt_at?: string
+          payload?: Json
+          provider?: string
+          provider_message_id?: string | null
+          status?: string
+          template_key?: string
+          to_email?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       order_items: {
         Row: {
           created_at: string
