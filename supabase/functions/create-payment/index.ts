@@ -34,6 +34,7 @@ type PaymentPayload = {
   };
   payment_method: 'pix' | 'card' | 'boleto';
   shipping_cost?: number;
+  shipping_method?: string | null;
   coupon_code?: string | null;
   card_token?: string | null;
   installments?: number;
@@ -258,7 +259,7 @@ async function auditLog(
 
 function parsePayload(raw: unknown): PaymentPayload {
   assertPlainObject(raw, 'payload');
-  assertAllowedKeys(raw, ['items', 'customer', 'shipping_address', 'payment_method', 'coupon_code', 'card_token', 'installments'], 'payload');
+  assertAllowedKeys(raw, ['items', 'customer', 'shipping_address', 'payment_method', 'shipping_cost', 'shipping_method', 'coupon_code', 'card_token', 'installments'], 'payload');
 
   assertPlainObject(raw.customer, 'customer');
   assertAllowedKeys(raw.customer, ['name', 'email', 'phone', 'cpf', 'cnpj', 'company_name', 'is_reseller'], 'customer');
@@ -627,6 +628,7 @@ Deno.serve(async req => {
         payment_method: payload.payment_method,
         payment_status: 'pending',
         shipping_address: shippingAddress as any,
+        shipping_method: sanitizeString(payload.shipping_method || '', 40) || null,
         status: 'pendente',
       })
       .select('id, order_number')

@@ -26,3 +26,6 @@ verify_jwt = false
 
 [functions.email-webhook]
 verify_jwt = false
+
+[functions.generate-shipping-label]
+verify_jwt = false
