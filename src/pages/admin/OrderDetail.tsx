@@ -21,6 +21,7 @@ const OrderDetail = () => {
   const { data: order, isLoading } = useOrderDetail(id);
   const updateStatus = useUpdateOrderStatus();
   const updateTracking = useUpdateTracking();
+  const generateLabel = useGenerateShippingLabel();
   const [newStatus, setNewStatus] = useState<OrderStatus | ''>('');
   const [statusNote, setStatusNote] = useState('');
   const [trackingCode, setTrackingCode] = useState('');
@@ -183,6 +184,66 @@ const OrderDetail = () => {
             {updateTracking.isPending ? 'Salvando...' : 'Salvar Rastreio'}
           </Button>
         </div>
+      </div>
+
+      {/* Shipping Label */}
+      <div className="bg-card rounded-lg shadow-soft p-5 space-y-3">
+        <h2 className="font-body text-sm font-semibold text-foreground flex items-center gap-2">
+          <Tag className="w-4 h-4" /> Etiqueta de Envio
+        </h2>
+        {order.shipping_method && (
+          <p className="font-body text-sm text-muted-foreground">
+            Serviço selecionado: <span className="font-medium text-foreground">{order.shipping_method}</span>
+          </p>
+        )}
+        {order.shipping_label ? (
+          <div className="space-y-2">
+            <p className="font-body text-sm text-muted-foreground">
+              Status: <span className="font-medium text-foreground">{(order.shipping_label as any).status || 'gerada'}</span>
+            </p>
+            {(order.shipping_label as any).tracking_code && (
+              <p className="font-body text-sm text-muted-foreground">
+                Rastreio: <span className="font-medium text-foreground">{(order.shipping_label as any).tracking_code}</span>
+              </p>
+            )}
+            {(order.shipping_label as any).label_url && (
+              <Button variant="outline" asChild className="w-full">
+                <a href={(order.shipping_label as any).label_url} target="_blank" rel="noopener noreferrer">
+                  <FileText className="w-4 h-4 mr-2" /> Baixar Etiqueta (PDF) <ExternalLink className="w-3 h-3 ml-1" />
+                </a>
+              </Button>
+            )}
+          </div>
+        ) : (
+          <Button
+            onClick={() => {
+              generateLabel.mutate(order.id, {
+                onSuccess: (data) => {
+                  toast.success('Etiqueta gerada com sucesso!');
+                  if (data?.label?.tracking_code) {
+                    setTrackingCode(data.label.tracking_code);
+                  }
+                },
+                onError: (err: any) => {
+                  toast.error(err?.message || 'Erro ao gerar etiqueta');
+                },
+              });
+            }}
+            disabled={generateLabel.isPending || !['confirmado', 'preparando'].includes(order.status)}
+            className="w-full"
+          >
+            {generateLabel.isPending ? (
+              <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Gerando...</>
+            ) : (
+              <><FileText className="w-4 h-4 mr-2" /> Gerar Etiqueta SuperFrete</>
+            )}
+          </Button>
+        )}
+        {!['confirmado', 'preparando'].includes(order.status) && !order.shipping_label && (
+          <p className="font-body text-xs text-muted-foreground">
+            Disponível quando o pedido estiver confirmado ou preparando.
+          </p>
+        )}
       </div>
 
       {/* Status History */}
