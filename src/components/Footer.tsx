@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Instagram, Mail } from 'lucide-react';
+import { APP_VERSION } from '@/lib/version';
 import { useStoreSettings } from '@/hooks/useStoreSettings';
 
 const Footer = () => {
@@ -44,7 +45,7 @@ const Footer = () => {
           </div>
         </div>
         <div className="border-t border-primary-foreground/10 pt-6 text-center">
-          <p className="text-xs font-body text-primary-foreground/40">© {new Date().getFullYear()} {brandName}. Todos os direitos reservados.</p>
+          <p className="text-xs font-body text-primary-foreground/40">© {new Date().getFullYear()} {brandName}. Todos os direitos reservados. · v{APP_VERSION}</p>
         </div>
       </div>
     </footer>
