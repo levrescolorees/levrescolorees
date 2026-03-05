@@ -87,9 +87,21 @@ Deno.serve(async (req) => {
       ? "https://api.superfrete.com"
       : "https://sandbox.superfrete.com";
 
+    const serviceMap: Record<string, string> = {
+      "PAC": "1",
+      "SEDEX": "2",
+      "MINI ENVIOS": "17",
+    };
+
+    const serviceCodes = enabledServices
+      .map((s: string) => serviceMap[s.toUpperCase()])
+      .filter(Boolean)
+      .join(",");
+
     const body = {
       from: { postal_code: originZip.replace(/\D/g, "") },
       to: { postal_code: postal_code_to.replace(/\D/g, "") },
+      services: serviceCodes,
       package: {
         weight: totalWeight,
         height: maxHeight,
