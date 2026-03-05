@@ -1,35 +1,35 @@
 
 
-## Adicionar campo de Token no painel SuperFrete
+## Corrigir encoding quebrado no Checkout.tsx
 
-### Problema
-Hoje o token da SuperFrete é armazenado como secret do Supabase (`SUPERFRETE_TOKEN`), sem possibilidade de alteração pelo admin. O usuário quer autonomia total para trocar o token direto no painel.
+O arquivo `src/pages/Checkout.tsx` foi salvo com encoding incorreto (Latin-1 em vez de UTF-8), causando caracteres acentuados exibidos como "EndereÃ§o", "PrÃ³ximo", "GrÃ¡tis", etc. Este é o **único arquivo** afetado — todos os outros arquivos do projeto estão com encoding correto.
 
-### Solução
-Armazenar o token no campo `value` da tabela `store_settings` (key: `superfrete`) junto com as outras configs, e atualizar a edge function para ler o token de lá em vez de `Deno.env.get("SUPERFRETE_TOKEN")`.
+### Strings a corrigir
 
-### Mudanças
+| Linha | Atual (quebrado) | Correto |
+|-------|------------------|---------|
+| 91 | `EndereÃ§o` | `Endereço` |
+| 200 | `CEP nÃ£o encontrado` | `CEP não encontrado` |
+| 513 | `â€" Pagamento aprovado! VocÃª receberÃ¡...` | `— Pagamento aprovado! Você receberá...` |
+| 514 | `â€" Complete o pagamento abaixo.` | `— Complete o pagamento abaixo.` |
+| 530 | `cÃ³digo Pix` | `código Pix` |
+| 533 | `CÃ³digo copiado!` | `Código copiado!` |
+| 539 | `â± Validade...â€¢` | `⏱ Validade...•` |
+| 541 | `JÃ¡ paguei â€" verificar status` | `Já paguei — verificar status` |
+| 550 | `BancÃ¡rio` | `Bancário` |
+| 555 | `CÃ³digo copiado!` | `Código copiado!` |
+| 565 | `dias Ãºteis â€¢` | `dias úteis •` |
+| 577 | `cartÃ£o final` | `cartão final` |
+| 612 | `esta vazio` / `Colecoes` | `está vazio` / `Coleções` |
+| 692 | `PrÃ³ximo` | `Próximo` |
+| 701 | `EndereÃ§o de Entrega` | `Endereço de Entrega` |
+| 708 | `NÃºmero` | `Número` |
+| 720 | `PrÃ³ximo` | `Próximo` |
+| 802 | `CartÃ£o` / `AtÃ©` | `Cartão` / `Até` |
+| 803 | `dias Ãºteis` | `dias úteis` |
+| 964 | `GrÃ¡tis` | `Grátis` |
 
-**1. `src/pages/admin/AdminIntegrationSuperFrete.tsx`**
-- Adicionar estado `sfToken` e campo de input tipo password com botão de mostrar/ocultar
-- Salvar o token junto com as demais configurações no `store_settings`
-- Remover o texto "entre em contato com o suporte"
-- Mostrar indicador visual se o token está preenchido ou não
+### Ação
 
-**2. `supabase/functions/calculate-shipping/index.ts`**
-- Ler o token de `settings.token` (vindo do `store_settings`) em vez de `Deno.env.get("SUPERFRETE_TOKEN")`
-- Manter fallback para o secret caso `settings.token` não exista (retrocompatibilidade)
-
-### Segurança
-- O token fica na tabela `store_settings` que só admins podem escrever (RLS já garante isso)
-- A leitura pública via `get_public_store_settings` expõe todos os settings — porém a edge function usa `SERVICE_ROLE_KEY`, então o token não precisa ser exposto no frontend
-- No frontend, o token será mascarado (input type password) e só enviado na mutation de save
-
-### Nota sobre `get_public_store_settings`
-A function RPC `get_public_store_settings` retorna TODOS os settings publicamente. Isso significa que o token ficaria exposto via essa RPC. Para evitar isso, vou atualizar a function para excluir campos sensíveis, ou armazenar o token em uma key separada (`superfrete_token`) que a RPC filtra.
-
-**Abordagem escolhida**: Salvar o token dentro do JSON de `superfrete` mas atualizar a RPC `get_public_store_settings` para remover o campo `token` do JSON antes de retornar.
-
-**3. Migration SQL**
-- Atualizar a function `get_public_store_settings` para sanitizar o campo `token` do setting `superfrete` antes de retornar
+Reescrever o arquivo `src/pages/Checkout.tsx` inteiro com encoding UTF-8 correto, corrigindo todas as ~20+ strings quebradas listadas acima. Também remover o BOM character (`﻿`) da linha 1.
 
