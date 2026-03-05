@@ -48,10 +48,10 @@ Deno.serve(async (req) => {
     const environment = (settings.environment as string) || "sandbox";
     const enabledServices = (settings.services as string[]) || ["PAC", "SEDEX", "Mini Envios"];
 
-    const superfreteToken = Deno.env.get("SUPERFRETE_TOKEN");
+    const superfreteToken = (settings.token as string) || Deno.env.get("SUPERFRETE_TOKEN");
     if (!superfreteToken) {
       return new Response(
-        JSON.stringify({ error: "Token da SuperFrete não configurado" }),
+        JSON.stringify({ error: "Token da SuperFrete não configurado. Configure em Admin → Integrações → SuperFrete." }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

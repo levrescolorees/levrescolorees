@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Save, CheckCircle2, AlertCircle, ArrowLeft } from 'lucide-react';
+import { Save, CheckCircle2, AlertCircle, ArrowLeft, Eye, EyeOff } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Input } from '@/components/ui/input';
@@ -16,6 +16,7 @@ interface SuperFreteSettings {
   environment?: 'sandbox' | 'production';
   origin_zip?: string;
   services?: string[];
+  token?: string;
 }
 
 const AdminIntegrationSuperFrete = () => {
@@ -27,6 +28,8 @@ const AdminIntegrationSuperFrete = () => {
   const [sfEnvironment, setSfEnvironment] = useState<'sandbox' | 'production'>('sandbox');
   const [sfOriginZip, setSfOriginZip] = useState('');
   const [sfServices, setSfServices] = useState<string[]>(['PAC', 'SEDEX', 'Mini Envios']);
+  const [sfToken, setSfToken] = useState('');
+  const [showToken, setShowToken] = useState(false);
 
   useEffect(() => {
     if (settings?.superfrete) {
@@ -35,6 +38,7 @@ const AdminIntegrationSuperFrete = () => {
       setSfEnvironment(sf.environment || 'sandbox');
       setSfOriginZip(sf.origin_zip || '');
       setSfServices(sf.services || ['PAC', 'SEDEX', 'Mini Envios']);
+      setSfToken(sf.token || '');
     }
   }, [settings]);
 
@@ -45,10 +49,11 @@ const AdminIntegrationSuperFrete = () => {
         environment: sfEnvironment,
         origin_zip: sfOriginZip,
         services: sfServices,
+        token: sfToken,
       };
       const { error } = await supabase
         .from('store_settings')
-        .upsert({ key: 'superfrete', value }, { onConflict: 'key' });
+        .upsert({ key: 'superfrete', value: value as any }, { onConflict: 'key' });
       if (error) throw error;
     },
     onSuccess: () => {
@@ -98,6 +103,38 @@ const AdminIntegrationSuperFrete = () => {
       {/* Form */}
       <div className="bg-card rounded-lg shadow-soft p-6 space-y-6 max-w-2xl">
         <div className="space-y-4">
+          {/* Token */}
+          <div>
+            <label className="font-body text-sm font-medium text-foreground">Token de API</label>
+            <div className="relative mt-1 max-w-md">
+              <Input
+                type={showToken ? 'text' : 'password'}
+                value={sfToken}
+                onChange={e => setSfToken(e.target.value)}
+                placeholder="Cole seu token da SuperFrete aqui"
+                className="font-body pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowToken(!showToken)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+            <p className="font-body text-xs text-muted-foreground mt-1">
+              {sfToken ? (
+                <span className="text-green-600 flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3" /> Token configurado
+                </span>
+              ) : (
+                <span className="text-destructive flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3" /> Token não configurado — obtenha em painel.superfrete.com
+                </span>
+              )}
+            </p>
+          </div>
+
           {/* Environment */}
           <div>
             <label className="font-body text-sm font-medium text-foreground">Ambiente</label>
@@ -134,10 +171,6 @@ const AdminIntegrationSuperFrete = () => {
               ))}
             </div>
           </div>
-
-          <p className="font-body text-xs text-muted-foreground">
-            O token de API da SuperFrete é armazenado como secret seguro no servidor. Para alterar, entre em contato com o suporte.
-          </p>
         </div>
 
         <Button onClick={() => saveSf.mutate()} disabled={saveSf.isPending} className="w-full sm:w-auto">
