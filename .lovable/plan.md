@@ -1,71 +1,37 @@
 
 
-## Upgrade: Email System Hardening
+## Diagnóstico: Tela Branca
 
-### Current State
+### Causa Provável
 
-The outbox pattern is already in place (tables, triggers, worker, webhook). This upgrade hardens it with 6 targeted improvements.
+O app **não tem Error Boundary** (React). Se qualquer componente lançar um erro durante a renderização — seja por falha de rede, dados inesperados de uma query Supabase, ou qualquer exceção JavaScript — o React desmonta a árvore inteira e exibe uma tela branca sem nenhum feedback.
 
-### 1. Database Migration
+Sem Error Boundary, não há log no console nem replay de sessão (o app morre antes de montar).
 
-**A) Dequeue RPC with `FOR UPDATE SKIP LOCKED`**
+### Plano de Correção
 
-Create `email_outbox_dequeue(p_limit int)` — atomically selects + marks as `sending` in one statement, preventing two workers from grabbing the same row.
+**1. Criar um Error Boundary global** (`src/components/ErrorBoundary.tsx`)
+- Class component React com `componentDidCatch` e `getDerivedStateFromError`
+- Exibe uma tela amigável com botão "Recarregar página" em vez de tela branca
+- Loga o erro no console para diagnóstico
 
-**B) Better partial index for worker**
+**2. Envolver o App com o Error Boundary** (`src/App.tsx`)
+- Wraps everything inside `<ErrorBoundary>` logo após os providers
+- Se qualquer filho crashar, o fallback aparece em vez da tela branca
 
-Replace the existing `idx_email_outbox_queue` with a more targeted partial index on `(next_attempt_at) WHERE status = 'queued'` only.
+**3. Adicionar tratamento de erro no ThemeProvider**
+- O `useStoreSettings` pode falhar silenciosamente, mas o `migrateTheme(raw)` pode lançar exceção se `raw` tiver formato inesperado
+- Adicionar try/catch no `migrateTheme` para fallback ao tema padrão
 
-**C) Fix triggers to use `IS DISTINCT FROM`**
+**4. Adicionar tratamento de erro no AuthProvider**
+- A query `fetchRole` pode falhar por rede ou RLS — garantir que `setLoading(false)` é chamado mesmo em caso de erro, evitando loading infinito (tela branca)
 
-Re-create the 3 update trigger functions (`enqueue_email_on_order_status`, `enqueue_email_on_tracking`, `enqueue_email_on_payment_approved`) using `IS DISTINCT FROM` instead of `=` / manual null checks. This handles NULL transitions correctly and is more concise.
+### Arquivos Alterados
 
-**D) Fix `email_delivery_events.outbox_id` to be nullable**
-
-Current schema has `NOT NULL` on outbox_id with `ON DELETE CASCADE`. The webhook may receive events for emails not yet in the outbox (race condition). Change to nullable with `ON DELETE SET NULL`.
-
-**E) Cron job via Vault (no hardcoded tokens)**
-
-- Unschedule the existing cron job
-- Store the project URL and `EMAIL_CRON_SECRET` in Vault
-- Re-create cron using `vault.decrypted_secrets`
-
-Note: This requires the `EMAIL_CRON_SECRET` secret to be added first. The cron setup will be done via the SQL insert tool (not migration) since it contains project-specific data.
-
-### 2. Edge Function: `email-worker`
-
-Update to:
-- Use `supabase.rpc('email_outbox_dequeue')` instead of SELECT + UPDATE
-- Send `Idempotency-Key` header to Resend (using the outbox `idempotency_key`)
-- Authenticate via `EMAIL_CRON_SECRET` or service role key (accept either)
-- Keep existing template rendering logic intact
-
-### 3. Edge Function: `email-webhook`
-
-Update to:
-- Accept raw body (text, not JSON) for Svix signature verification
-- Verify using the `svix` npm package with `RESEND_WEBHOOK_SECRET`
-- Requires new secret: `RESEND_WEBHOOK_SECRET` (from Resend dashboard → Webhooks → Signing Secret)
-
-### 4. New Secrets Required
-
-- `EMAIL_CRON_SECRET` — any random string to protect the worker endpoint
-- `RESEND_WEBHOOK_SECRET` — Svix signing secret from Resend webhook settings (optional, can skip webhook verification initially)
-
-### Files Changed
-
-| File | Change |
-|------|--------|
-| New migration SQL | Dequeue RPC, fix indexes, fix triggers, fix outbox_id nullability |
-| SQL insert (not migration) | Vault secrets + cron reschedule |
-| `supabase/functions/email-worker/index.ts` | Use RPC dequeue + Idempotency-Key header |
-| `supabase/functions/email-webhook/index.ts` | Svix signature verification |
-
-### Order of Implementation
-
-1. Add secrets (`EMAIL_CRON_SECRET`, `RESEND_WEBHOOK_SECRET`)
-2. Run migration (RPC, indexes, triggers)
-3. Update email-worker edge function
-4. Update email-webhook edge function
-5. Reschedule cron via Vault (SQL insert)
+| Arquivo | Mudança |
+|---------|---------|
+| `src/components/ErrorBoundary.tsx` | Novo — Error Boundary com fallback visual |
+| `src/App.tsx` | Envolver conteúdo com `<ErrorBoundary>` |
+| `src/components/ThemeProvider.tsx` | try/catch no migrateTheme |
+| `src/hooks/useAuth.tsx` | try/catch no fetchRole com fallback |
 
