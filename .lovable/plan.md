@@ -1,33 +1,53 @@
 
 
-## Correção: Erro "insertBefore" no DOM
+## Corrigir cálculo de frete SuperFrete — campo `services` obrigatório
 
-### Diagnóstico
+### Problema
 
-O erro `Failed to execute 'insertBefore' on 'Node'` é um problema **clássico do React** causado por **extensões de navegador** (Google Translate, Grammarly, ad blockers, etc.) que modificam o DOM por fora do React. Quando o React tenta reconciliar o DOM e encontra nós que foram movidos/removidos pela extensão, ele crasheia.
+Os logs da edge function `calculate-shipping` mostram erro 400 da API SuperFrete:
 
-Isso explica por que acontece **só no PC da Isabela** — ela provavelmente tem uma extensão (ex: tradução automática do Chrome) que mexe nos nós de texto da página.
+```
+{"errors":{"services":["(services) é obrigatório."]},"message":"Ocorreu um ou mais erros."}
+```
+
+A API SuperFrete exige o campo `services` no body da requisição, indicando quais serviços cotar (ex: `1` para PAC, `2` para SEDEX, `17` para Mini Envios). A edge function atual não envia esse campo.
 
 ### Solução
 
-Atualizar o `ErrorBoundary` para **ignorar este erro específico** e tentar se recuperar automaticamente em vez de mostrar a tela de erro.
+Atualizar `supabase/functions/calculate-shipping/index.ts` para incluir o campo `services` no body da requisição à API SuperFrete. O mapeamento correto dos serviços SuperFrete é:
 
-**Arquivo: `src/components/ErrorBoundary.tsx`**
+| Nome | Código |
+|------|--------|
+| PAC | 1 (ou "1") |
+| SEDEX | 2 (ou "2") |
+| Mini Envios | 17 (ou "17") |
 
-1. No `getDerivedStateFromError`, detectar se o erro contém `"insertBefore"` ou `"removeChild"` (erros comuns de extensões)
-2. Se for esse tipo de erro, fazer `setState` para resetar e tentar re-render em vez de mostrar o fallback
-3. Adicionar `componentDidCatch` que loga mas não crasheia para esses erros de DOM
+### Mudança
 
-Adicionalmente, adicionar uma meta tag no `index.html` para impedir tradução automática:
+**`supabase/functions/calculate-shipping/index.ts`**
+- Criar um mapeamento de nome de serviço → código numérico
+- Converter a lista `enabledServices` (ex: `["PAC", "SEDEX"]`) nos códigos correspondentes
+- Adicionar o campo `services` ao body enviado para `POST /api/v0/calculator`
 
-**Arquivo: `index.html`**
+```typescript
+const serviceMap: Record<string, string> = {
+  "PAC": "1",
+  "SEDEX": "2",
+  "MINI ENVIOS": "17",
+};
 
-- Adicionar `<meta name="google" content="notranslate">` no `<head>`
+const serviceCodes = enabledServices
+  .map(s => serviceMap[s.toUpperCase()])
+  .filter(Boolean)
+  .join(",");
 
-### Arquivos
+const body = {
+  from: { postal_code: originZip.replace(/\D/g, "") },
+  to: { postal_code: postal_code_to.replace(/\D/g, "") },
+  services: serviceCodes,  // <-- campo obrigatório
+  package: { weight, height, width, length },
+};
+```
 
-| Arquivo | Mudança |
-|---------|---------|
-| `src/components/ErrorBoundary.tsx` | Ignorar erros de DOM causados por extensões, tentar recovery |
-| `index.html` | Meta tag para desabilitar tradução automática do Chrome |
+Apenas 1 arquivo alterado, apenas a edge function. Nenhuma mudança no frontend.
 

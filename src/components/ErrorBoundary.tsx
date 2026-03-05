@@ -1,6 +1,13 @@
 import React from 'react';
 import { APP_VERSION } from '@/lib/version';
 
+const DOM_ERROR_PATTERNS = ['insertBefore', 'removeChild', 'appendChild', 'not a child of this node'];
+
+function isDomExtensionError(error: Error): boolean {
+  const msg = error?.message?.toLowerCase() ?? '';
+  return DOM_ERROR_PATTERNS.some(p => msg.includes(p.toLowerCase()));
+}
+
 interface State {
   hasError: boolean;
   error: Error | null;
@@ -10,10 +17,18 @@ export class ErrorBoundary extends React.Component<{ children: React.ReactNode }
   state: State = { hasError: false, error: null };
 
   static getDerivedStateFromError(error: Error): State {
+    if (isDomExtensionError(error)) {
+      console.warn('[ErrorBoundary] DOM error from browser extension ignored:', error.message);
+      return { hasError: false, error: null };
+    }
     return { hasError: true, error };
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
+    if (isDomExtensionError(error)) {
+      console.warn('[ErrorBoundary] Suppressed DOM extension error');
+      return;
+    }
     console.error('[ErrorBoundary] Uncaught error:', error, info.componentStack);
   }
 
