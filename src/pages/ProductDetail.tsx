@@ -8,6 +8,7 @@ import CartDrawer from '@/components/CartDrawer';
 import ProductCard from '@/components/ProductCard';
 import { useProductBySlug, useStorefrontProducts, formatCurrency, getSmartPriceFromRules } from '@/hooks/useProducts';
 import { useCart } from '@/context/CartContext';
+import WhatsAppButton from '@/components/WhatsAppButton';
 
 const ProductDetail = () => {
   const { slug } = useParams();
