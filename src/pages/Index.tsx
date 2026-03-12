@@ -10,6 +10,8 @@ import { lazy, Suspense } from 'react';
 
 const CollectionsSection = lazy(() => import('@/components/CollectionsSection'));
 const TestimonialsSection = lazy(() => import('@/components/TestimonialsSection'));
+const ResellersTestimonials = lazy(() => import('@/components/ResellersTestimonials'));
+const InstagramFeed = lazy(() => import('@/components/InstagramFeed'));
 const FinalCTA = lazy(() => import('@/components/FinalCTA'));
 
 const LazySection = ({ children }: { children: React.ReactNode }) => {
