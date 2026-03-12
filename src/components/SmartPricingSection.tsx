@@ -39,7 +39,7 @@ const TierCard = ({ tier, delay }: { tier: typeof tiers[0]; delay: number }) => 
       className={`relative rounded-sm p-6 text-center transition-all duration-500 ease-out ${className} ${
         tier.highlight
           ? 'bg-gradient-rose text-primary-foreground shadow-rose scale-[1.03]'
-          : 'bg-card shadow-soft'
+        : 'bg-card shadow-soft border border-rose-gold/10'
       }`}
     >
       {tier.highlight && (

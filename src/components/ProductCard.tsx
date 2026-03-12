@@ -46,7 +46,7 @@ const ProductCard = ({ product, index = 0 }: ProductCardProps) => {
       className={`group transition-all duration-500 ease-out ${animClass}`}
     >
       <Link to={`/produto/${product.slug}`} className="block">
-        <div className="relative overflow-hidden rounded-sm bg-secondary aspect-[3/4] mb-4">
+        <div className="relative overflow-hidden rounded-2xl bg-background shadow-rose-warm border border-transparent hover:border-rose-gold/30 transition-all aspect-[3/4] mb-4">
           {product.images?.[0] ? (
             <img
               src={product.images[0]}
@@ -60,12 +60,12 @@ const ProductCard = ({ product, index = 0 }: ProductCardProps) => {
             </div>
           )}
           {product.badge && (
-            <span className="absolute top-3 left-3 bg-primary text-primary-foreground text-[10px] font-body font-bold tracking-wider uppercase px-3 py-1.5 rounded-sm">
+            <span className="absolute top-3 left-3 bg-primary text-primary-foreground text-[10px] font-body font-bold tracking-wider uppercase px-3 py-1.5 rounded-full">
               {product.badge}
             </span>
           )}
           {product.ideal_for_resale && (
-            <span className="absolute top-3 right-3 bg-accent text-accent-foreground text-[10px] font-body font-bold tracking-wider uppercase px-3 py-1.5 rounded-sm">
+            <span className="absolute top-3 right-3 bg-rose-gold text-primary-foreground text-[10px] font-body font-bold tracking-wider uppercase px-3 py-1.5 rounded-full">
               Ideal Revenda
             </span>
           )}

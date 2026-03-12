@@ -21,8 +21,8 @@ const HeroBanner = () => {
     <section className="relative min-h-[85vh] md:min-h-[90vh] flex items-center overflow-hidden">
       {/* Background */}
       <div className="absolute inset-0">
-        <img src={heroBanner} alt="Levres Colorees - Lip products premium" className="w-full h-full object-cover" fetchPriority="high" decoding="async" />
-        <div className="absolute inset-0 bg-gradient-to-r from-foreground/70 via-foreground/40 to-transparent" />
+        <img src={heroBanner} alt="Lèvres Colorées - Lip products premium" className="w-full h-full object-cover" fetchPriority="high" decoding="async" />
+        <div className="absolute inset-0 bg-gradient-to-r from-primary/50 via-primary/25 to-transparent" />
       </div>
 
       <div className="container mx-auto px-4 relative z-10">
@@ -36,11 +36,11 @@ const HeroBanner = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.3 }}
-            className="inline-block text-rose-glow text-sm font-body tracking-[0.3em] uppercase mb-4"
+            className="inline-block text-rose-glow text-sm font-body tracking-[0.2em] uppercase mb-4"
           >
             Nova Coleção 2025
           </motion.span>
-          <h1 className="font-display text-4xl md:text-6xl lg:text-7xl font-bold text-primary-foreground leading-tight mb-6">
+          <h1 className="font-display text-4xl md:text-6xl lg:text-7xl font-normal text-primary-foreground leading-tight mb-6">
             {headline.includes(',') ? (
               <>
                 {headline.split(',')[0]},<br />

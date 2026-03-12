@@ -56,6 +56,7 @@ export default {
           DEFAULT: "hsl(var(--rose))",
           light: "hsl(var(--rose-light))",
           glow: "hsl(var(--rose-glow))",
+          gold: "hsl(var(--rose-gold))",
         },
         nude: {
           DEFAULT: "hsl(var(--nude))",

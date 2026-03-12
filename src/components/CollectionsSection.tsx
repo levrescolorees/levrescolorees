@@ -31,7 +31,7 @@ const CollectionCard = ({ item, delay }: { item: typeof items[0]; delay: number 
 };
 
 const CollectionsSection = () => (
-  <section className="py-16 md:py-24 bg-secondary/50">
+  <section className="py-16 md:py-24 bg-background">
     <div className="container mx-auto px-4">
       <div className="text-center mb-12">
         <span className="text-sm font-body tracking-[0.3em] uppercase text-primary mb-2 block">Explore</span>

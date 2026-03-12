@@ -163,8 +163,8 @@ const ProductDetail = () => {
                   <Award className="w-5 h-5 text-accent flex-shrink-0 mt-0.5" />
                   <div>
                     <p className="font-body text-sm font-semibold text-foreground">Ideal para Revendedores</p>
-                    <p className="font-body text-xs text-muted-foreground">
-                      Preço sugerido de venda: {formatCurrency(product.retail_price)} | Margem estimada: {realMargin.toFixed(0)}%
+                    <p className="font-body text-xs text-muted-foreground mt-1">
+                      Preço sugerido de revenda: {formatCurrency(product.retail_price)} · <span className="inline-flex items-center gap-1 text-emerald-600 font-semibold"><TrendingUp className="w-3 h-3" />Margem estimada: {realMargin.toFixed(0)}%</span>
                     </p>
                   </div>
                 </div>
