@@ -254,6 +254,7 @@ const ProductDetail = () => {
       </main>
       <Footer />
       <CartDrawer />
+      <WhatsAppButton />
 
       {/* Mobile fixed CTA */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-md border-t border-border p-3 z-40">

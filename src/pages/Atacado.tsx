@@ -108,6 +108,7 @@ const Atacado = () => {
       </main>
       <Footer />
       <CartDrawer />
+      <WhatsAppButton />
     </div>
   );
 };

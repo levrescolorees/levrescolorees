@@ -6,6 +6,7 @@ import BenefitsSection from '@/components/BenefitsSection';
 import Footer from '@/components/Footer';
 import CartDrawer from '@/components/CartDrawer';
 import { useLazySection } from '@/hooks/useLazySection';
+import WhatsAppButton from '@/components/WhatsAppButton';
 import { lazy, Suspense } from 'react';
 
 const CollectionsSection = lazy(() => import('@/components/CollectionsSection'));
