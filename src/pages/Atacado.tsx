@@ -6,6 +6,8 @@ import Footer from '@/components/Footer';
 import CartDrawer from '@/components/CartDrawer';
 import ProductCard from '@/components/ProductCard';
 import { useStorefrontProducts, formatCurrency, getSmartPriceFromRules } from '@/hooks/useProducts';
+import WhatsAppButton from '@/components/WhatsAppButton';
+import ProfitCalculator from '@/components/ProfitCalculator';
 import box06Img from '@/assets/box-06.jpg';
 import box12Img from '@/assets/box-12.jpg';
 
@@ -87,6 +89,9 @@ const Atacado = () => {
           </section>
         )}
 
+        {/* Profit Calculator */}
+        <ProfitCalculator />
+
         {/* All products */}
         <section className="py-12 md:py-20 bg-secondary/50">
           <div className="container mx-auto px-4">
@@ -103,6 +108,7 @@ const Atacado = () => {
       </main>
       <Footer />
       <CartDrawer />
+      <WhatsAppButton />
     </div>
   );
 };

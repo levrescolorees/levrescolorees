@@ -6,10 +6,13 @@ import BenefitsSection from '@/components/BenefitsSection';
 import Footer from '@/components/Footer';
 import CartDrawer from '@/components/CartDrawer';
 import { useLazySection } from '@/hooks/useLazySection';
+import WhatsAppButton from '@/components/WhatsAppButton';
 import { lazy, Suspense } from 'react';
 
 const CollectionsSection = lazy(() => import('@/components/CollectionsSection'));
 const TestimonialsSection = lazy(() => import('@/components/TestimonialsSection'));
+const ResellersTestimonials = lazy(() => import('@/components/ResellersTestimonials'));
+const InstagramFeed = lazy(() => import('@/components/InstagramFeed'));
 const FinalCTA = lazy(() => import('@/components/FinalCTA'));
 
 const LazySection = ({ children }: { children: React.ReactNode }) => {
@@ -32,10 +35,13 @@ const Index = () => {
         <SmartPricingSection />
         <LazySection><CollectionsSection /></LazySection>
         <LazySection><TestimonialsSection /></LazySection>
+        <LazySection><ResellersTestimonials /></LazySection>
+        <LazySection><InstagramFeed /></LazySection>
         <LazySection><FinalCTA /></LazySection>
       </main>
       <Footer />
       <CartDrawer />
+      <WhatsAppButton />
     </div>
   );
 };

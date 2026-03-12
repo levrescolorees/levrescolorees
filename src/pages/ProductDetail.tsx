@@ -8,6 +8,7 @@ import CartDrawer from '@/components/CartDrawer';
 import ProductCard from '@/components/ProductCard';
 import { useProductBySlug, useStorefrontProducts, formatCurrency, getSmartPriceFromRules } from '@/hooks/useProducts';
 import { useCart } from '@/context/CartContext';
+import WhatsAppButton from '@/components/WhatsAppButton';
 
 const ProductDetail = () => {
   const { slug } = useParams();
@@ -154,17 +155,21 @@ const ProductDetail = () => {
             </div>
 
             {/* Resale badge */}
-            {product.ideal_for_resale && (
-              <div className="bg-accent/10 border border-accent/20 rounded-sm p-4 flex items-start gap-3">
-                <Award className="w-5 h-5 text-accent flex-shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-body text-sm font-semibold text-foreground">Ideal para Revendedores</p>
-                  <p className="font-body text-xs text-muted-foreground">
-                    Margem sugerida: {product.suggested_margin}%
-                  </p>
+            {product.ideal_for_resale && (() => {
+              const atacadoPrice = box12.price;
+              const realMargin = atacadoPrice > 0 ? ((product.retail_price - atacadoPrice) / atacadoPrice) * 100 : 0;
+              return (
+                <div className="bg-accent/10 border border-accent/20 rounded-sm p-4 flex items-start gap-3">
+                  <Award className="w-5 h-5 text-accent flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-body text-sm font-semibold text-foreground">Ideal para Revendedores</p>
+                    <p className="font-body text-xs text-muted-foreground">
+                      Preço sugerido de venda: {formatCurrency(product.retail_price)} | Margem estimada: {realMargin.toFixed(0)}%
+                    </p>
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* Color selector */}
             {colors.length > 0 && (
@@ -249,6 +254,7 @@ const ProductDetail = () => {
       </main>
       <Footer />
       <CartDrawer />
+      <WhatsAppButton />
 
       {/* Mobile fixed CTA */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-md border-t border-border p-3 z-40">
