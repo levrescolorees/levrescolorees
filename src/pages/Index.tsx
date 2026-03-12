@@ -34,10 +34,13 @@ const Index = () => {
         <SmartPricingSection />
         <LazySection><CollectionsSection /></LazySection>
         <LazySection><TestimonialsSection /></LazySection>
+        <LazySection><ResellersTestimonials /></LazySection>
+        <LazySection><InstagramFeed /></LazySection>
         <LazySection><FinalCTA /></LazySection>
       </main>
       <Footer />
       <CartDrawer />
+      <WhatsAppButton />
     </div>
   );
 };
