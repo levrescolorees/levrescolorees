@@ -89,6 +89,9 @@ const Atacado = () => {
           </section>
         )}
 
+        {/* Profit Calculator */}
+        <ProfitCalculator />
+
         {/* All products */}
         <section className="py-12 md:py-20 bg-secondary/50">
           <div className="container mx-auto px-4">
