@@ -16,6 +16,7 @@ export default {
       fontFamily: {
         display: ["Playfair Display", "serif"],
         body: ["Inter", "sans-serif"],
+        logo: ["Cormorant Garamond", "serif"],
       },
       colors: {
         border: "hsl(var(--border))",
@@ -55,6 +56,7 @@ export default {
           DEFAULT: "hsl(var(--rose))",
           light: "hsl(var(--rose-light))",
           glow: "hsl(var(--rose-glow))",
+          gold: "hsl(var(--rose-gold))",
         },
         nude: {
           DEFAULT: "hsl(var(--nude))",

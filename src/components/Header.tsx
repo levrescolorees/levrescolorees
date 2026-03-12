@@ -6,6 +6,21 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useStoreSettings } from '@/hooks/useStoreSettings';
 import { useTheme } from '@/components/ThemeProvider';
 
+/* Minimal lip icon — SVG inline for rose gold accent */
+const LipIcon = () => (
+  <svg width="22" height="18" viewBox="0 0 24 20" fill="none" xmlns="http://www.w3.org/2000/svg" className="text-rose-gold">
+    <path
+      d="M12 19C12 19 2 14 2 8C2 5 4 2 7 2C9 2 11 3.5 12 5C13 3.5 15 2 17 2C20 2 22 5 22 8C22 14 12 19 12 19Z"
+      stroke="currentColor"
+      strokeWidth="1.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      fill="none"
+    />
+    <path d="M4 10C7 11 10 11 12 10C14 11 17 11 20 10" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
+  </svg>
+);
+
 const Header = () => {
   const { totalItems, setIsCartOpen } = useCart();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -35,7 +50,7 @@ const Header = () => {
     setSearchQuery('');
   };
 
-  const brandName = settings?.brand?.name || 'Levres Colorees';
+  const brandName = settings?.brand?.name || 'Lèvres Colorées';
   const logoUrl = activeTheme?.components?.images?.logo || '';
   const topBarVisible = activeTheme?.components?.topBar?.visible ?? true;
   const topBarText = activeTheme?.components?.topBar?.text || 'FRETE GRÁTIS acima de R$299 • Compre no Atacado e economize até 40%';
@@ -47,6 +62,15 @@ const Header = () => {
     { to: '/colecoes?filter=novidades', label: 'Novidades' },
     { to: '/atacado', label: 'Atacado' },
   ];
+
+  const LogoFallback = ({ className = '' }: { className?: string }) => (
+    <span className={`flex items-center gap-2 ${className}`}>
+      <LipIcon />
+      <span className="font-logo text-2xl md:text-[1.7rem] font-light italic tracking-[0.05em] text-primary">
+        {brandName}
+      </span>
+    </span>
+  );
 
   return (
     <>
@@ -67,9 +91,7 @@ const Header = () => {
             {logoUrl ? (
               <img src={logoUrl} alt={brandName} className="h-8 md:h-10 w-auto object-contain" />
             ) : (
-              <span className="font-display text-xl md:text-2xl font-semibold tracking-wide text-foreground">
-                {brandName}
-              </span>
+              <LogoFallback />
             )}
           </Link>
 
@@ -157,7 +179,9 @@ const Header = () => {
               {logoUrl ? (
                 <img src={logoUrl} alt={brandName} className="h-8 w-auto object-contain mb-8" />
               ) : (
-                <div className="font-display text-xl font-semibold mb-8 text-foreground">{brandName}</div>
+                <div className="mb-8">
+                  <LogoFallback />
+                </div>
               )}
               <nav className="flex flex-col gap-4">
                 {navLinks.map(link => (

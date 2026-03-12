@@ -39,7 +39,7 @@ const TierCard = ({ tier, delay }: { tier: typeof tiers[0]; delay: number }) => 
       className={`relative rounded-sm p-6 text-center transition-all duration-500 ease-out ${className} ${
         tier.highlight
           ? 'bg-gradient-rose text-primary-foreground shadow-rose scale-[1.03]'
-          : 'bg-card shadow-soft'
+        : 'bg-card shadow-soft border border-rose-gold/10'
       }`}
     >
       {tier.highlight && (
@@ -80,10 +80,10 @@ const TierCard = ({ tier, delay }: { tier: typeof tiers[0]; delay: number }) => 
 };
 
 const SmartPricingSection = () => (
-  <section className="py-16 md:py-24 bg-background">
+  <section className="py-16 md:py-24 bg-muted">
     <div className="container mx-auto px-4">
       <div className="text-center mb-12">
-        <span className="text-sm font-body tracking-[0.3em] uppercase text-primary mb-2 block">
+        <span className="text-sm font-body tracking-[0.2em] uppercase text-rose-gold mb-2 block">
           Como Funciona
         </span>
         <h2 className="font-display text-3xl md:text-4xl font-semibold text-foreground mb-3">
