@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Star, Minus, Plus, ShoppingBag, ChevronLeft, Truck, ShieldCheck, Award, Loader2, ImageIcon } from 'lucide-react';
+import { Star, Minus, Plus, ShoppingBag, ChevronLeft, Truck, ShieldCheck, Award, Loader2, ImageIcon, TrendingUp } from 'lucide-react';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import CartDrawer from '@/components/CartDrawer';
