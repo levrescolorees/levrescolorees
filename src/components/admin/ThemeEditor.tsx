@@ -18,6 +18,8 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import ImageUploadRow from '@/components/admin/theme-editor/ImageUploadRow';
+import HeroSlidesEditor from '@/components/admin/theme-editor/HeroSlidesEditor';
+import type { ThemeHero } from '@/theme/defaultTheme';
 
 // ─── Contrast Badge ────────────────────────────────────────
 function ContrastBadge({ fg, bg }: { fg: string; bg: string }) {
@@ -134,6 +136,10 @@ const ThemeEditor = ({ onDraftChange }: ThemeEditorProps) => {
     updateDraft({ ...draft, components: { ...draft.components, images: { ...draft.components.images, [key]: url } } });
   };
 
+  const updateHero = (next: ThemeHero) => {
+    updateDraft({ ...draft, components: { ...draft.components, hero: next } });
+  };
+
   const applyPreset = (preset: ThemeSettings) => {
     const next = { ...preset, revision: draft.revision, history: draft.history, meta: { ...preset.meta, updatedAt: draft.meta.updatedAt, updatedById: draft.meta.updatedById } };
     updateDraft(next);
@@ -222,7 +228,7 @@ const ThemeEditor = ({ onDraftChange }: ThemeEditorProps) => {
         </div>
       </section>
 
-      <Accordion type="multiple" defaultValue={['brand', 'bg', 'text', 'comp', 'fonts', 'radius', 'topbar', 'images']} className="space-y-3">
+      <Accordion type="multiple" defaultValue={['brand', 'bg', 'text', 'comp', 'fonts', 'radius', 'topbar', 'images', 'heroSlides']} className="space-y-3">
         {/* Brand Colors */}
         <AccordionItem value="brand" className="bg-card rounded-lg shadow-soft border-none">
           <AccordionTrigger className="px-5 py-4 font-display text-base font-semibold">
