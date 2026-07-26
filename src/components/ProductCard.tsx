@@ -60,18 +60,22 @@ const ProductCard = ({ product, index = 0 }: ProductCardProps) => {
   };
 
   return (
-    <div
-      ref={ref}
-      className={`group transition-all duration-500 ease-out ${animClass}`}
-    >
-      <Link to={`/produto/${product.slug}`} className="block">
+    <div className="group">
+      <Link
+        to={`/produto/${product.slug}`}
+        className="block"
+        onMouseEnter={prefetch}
+        onTouchStart={prefetch}
+      >
         <div className="relative overflow-hidden rounded-2xl bg-background shadow-rose-warm border border-transparent hover:border-rose-gold/30 transition-all aspect-[3/4] mb-4">
           {product.images?.[0] ? (
             <img
               src={product.images[0]}
               alt={product.name}
               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
-              loading="lazy"
+              loading={eager ? 'eager' : 'lazy'}
+              decoding="async"
+              {...({ fetchpriority: eager ? 'high' : 'low' } as any)}
             />
           ) : (
             <div className="w-full h-full flex items-center justify-center">
