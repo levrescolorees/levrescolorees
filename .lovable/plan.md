@@ -1,70 +1,45 @@
 ## Objetivo
+Você terá autonomia total no editor de tema para gerenciar os slides do banner principal da home: adicionar, remover, reordenar, trocar imagem, título, subtítulo, texto do botão e link. Autoplay de 5s com setas e dots.
 
-Importar do site oficial (linhabrunatavares.com — VTEX) o produto **BT Skin – Base Líquida** com **todas as 30 variações de tom**, incluindo:
-- Nome do tom (ex.: F10, L20, M30, T40, D50…)
-- Subtom / família (Fair, Light, Medium, Tan, Deep)
-- Imagem do bocal (aquele círculo colorido do swatch) para cada tom
-- Imagens principais do produto (packshot, embalagem, textura)
-- Descrição oficial
+## O que muda
 
-Cadastrar no `/admin/produtos` **e** deixar visível na loja pública.
+### 1. Schema do tema (`src/theme/defaultTheme.ts` + `themeSchema.ts`)
+Adicionar em `components`:
+```
+hero: {
+  slides: [
+    { id, image, headline, subheadline, ctaText, ctaLink, alignment: 'left'|'center'|'right' }
+  ],
+  autoplay: true,
+  intervalMs: 5000
+}
+```
+Migração converte o `heroBanner` atual + `hero` do `store_settings` em 1 slide inicial, para não perder nada. `components.images.heroBanner` continua como fallback.
 
-## Parâmetros
+### 2. Nova aba "Slides do Hero" no editor (`ThemeEditor.tsx`)
+Novo `AccordionItem` "Slides do Hero" com:
+- Lista de slides (cards arrastáveis para reordenar via ↑/↓)
+- Botão **"+ Adicionar slide"**
+- Em cada slide: `ImageUploadRow` (reaproveita upload+crop existente, aspect 1920/800), inputs para headline/subheadline/CTA/link, select de alinhamento, botão duplicar, botão remover
+- Switch autoplay + input de intervalo (segundos)
+- Preview ao vivo no iframe já existente (o `ThemeProvider` re-aplica a cada mudança)
 
-- Custo R$ 1,00 / Venda R$ 1,00 (você ajusta depois — foi o que você pediu)
-- Estoque 100 por variação
-- `is_active: true`, `status: 'published'`, `published_at: now()` — para aparecer na loja
-- Anexar à coleção **"Mais Vendidos"** (usada pela home) e à **"Novidades"**; se não existirem, cria.
+### 3. HeroBanner vira carrossel (`src/components/HeroBanner.tsx`)
+- Se houver 2+ slides → renderiza carrossel usando `@/components/ui/carousel` (Embla, já instalado)
+- Autoplay via plugin `embla-carousel-autoplay` (adicionar dep)
+- Setas + dots com cores do tema
+- 1 slide só → mantém render estático atual (sem controles)
+- Fallback total: se nenhum slide configurado, usa o `heroBanner` legacy + textos do `hero` legacy
 
-## Fonte dos dados (sem connector, sem scraper pago)
+### 4. Upload de imagens
+Já funciona: `ImageUploadRow` faz upload no bucket `theme-assets` com crop. Reaproveitado sem mudança — cada slide usa `folder="hero/slides"`.
 
-A VTEX expõe endpoints públicos JSON:
-
-- `GET /api/catalog_system/pub/products/search/bt-skin` → produto pai + todos os `items` (SKUs) com nome, imagens em alta e specifications.
-- Cada SKU tem `images[]` com o bocal/swatch (`001-<TOM>.png`) já pronto em `brunatavares.vtexassets.com`.
-- A família (Fair/Light/Medium/Tan/Deep) sai do prefixo do nome do tom: **F**→Fair, **L**→Light, **M**→Medium, **T**→Tan, **D**→Deep.
-
-Já validei que o endpoint responde e traz todos os tons numa única chamada.
-
-## Passos
-
-1. **Edge function `import-bt-skin`** (nova, `verify_jwt = false` no `config.toml`)
-   - Fetch da API VTEX do slug `bt-skin`.
-   - Valida resposta com Zod.
-   - Baixa 4–6 imagens principais do produto pai + 1 imagem de swatch por tom, faz upload no bucket `product-images` em `bt-skin/<slug>.jpg` (com `upsert: true`) → coleta URLs públicas Supabase.
-   - Monta e insere via `service_role`:
-     - `products` (1 linha):
-       - name: "BT Skin – Base Líquida Aveludada 40ml"
-       - slug: `bt-skin-base-liquida-40ml-<rand>`
-       - sku: `BTSKIN-40ML`
-       - retail_price: 1, cost_price: 1, stock: 0, weight: 0.08 (kg)
-       - short_description / description: extraídos da VTEX (HTML limpo com sanitização)
-       - images: URLs públicas do bucket
-       - is_active: true, status: 'published', published_at: now()
-       - badge: "Novo"
-     - `product_variants` (30 linhas — uma por tom):
-       - name: `"<Família> <Tom>"` (ex.: "Medium M30") — para o swatch/rótulo já sair legível
-       - sku: `BTSKIN-40ML-<TOM>`
-       - stock: 100, price_override: null, sort_order: índice
-       - images: `[<url pública do swatch do tom>]`
-     - `collection_products`: anexa à(s) coleção(ões) padrão (cria se faltar).
-   - Retorna `{ product_id, slug, variants_count, admin_url, storefront_url }`.
-
-2. **Deploy + disparo** via `supabase--curl_edge_functions` (POST vazio).
-
-3. **Verificação**
-   - `SELECT` do produto + `COUNT` de variantes (esperado 30).
-   - Abro a rota `/produto/<slug>` no preview para conferir imagens/tons visíveis na loja.
-   - Confirmo que aparece no `/admin/produtos`.
+## Não incluso (deixado para depois, se quiser)
+- Editar Cards de Coleções, Feed Instagram e banners intermediários — pediu só "hero como carrossel". Se quiser depois, abrimos outro plano.
 
 ## Detalhes técnicos
-
-- Sem novos secrets — usa `SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY` já existentes.
-- Bucket `product-images` já é público → URLs de swatch funcionam direto no front.
-- `stock` do produto pai fica 0 (o real está nas variantes) — comportamento igual ao cadastro manual.
-- Idempotência: função checa se já existe produto com `sku='BTSKIN-40ML'`; se sim, atualiza (upsert de imagens + variantes por SKU) em vez de duplicar.
-- Slug com sufixo aleatório só na criação — no re-run mantém o slug existente.
-- Reaproveitável: aceita `?slug=bt-skin` (ou qualquer outro slug BT) via query, então serve para trazer futuros produtos da linha depois.
-- Sem mudanças no frontend — a loja já lê `products`/`product_variants` e o `ProductCard` já mostra swatches a partir de `variants[].images[0]`.
-
-Ao aprovar, sigo direto: crio a função, disparo, verifico no banco e no preview, e te mando os links.
+- Persistência: continua em `store_settings.theme` (JSONB). Sem nova migração de DB.
+- Dep nova: `embla-carousel-autoplay` (~2kb).
+- IDs de slides gerados com `crypto.randomUUID()`.
+- Reordenação sem lib de drag: botões ↑/↓ (leve e sem regressão).
+- Compat total com temas salvos — `migrateTheme` popula `hero.slides` a partir do estado antigo na primeira leitura.
