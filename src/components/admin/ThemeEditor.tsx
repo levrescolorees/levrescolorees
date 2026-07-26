@@ -380,6 +380,19 @@ const ThemeEditor = ({ onDraftChange }: ThemeEditorProps) => {
             />
           </AccordionContent>
         </AccordionItem>
+
+        {/* Hero Slides */}
+        <AccordionItem value="heroSlides" className="bg-card rounded-lg shadow-soft border-none">
+          <AccordionTrigger className="px-5 py-4 font-display text-base font-semibold">
+            <span className="flex items-center gap-2"><Images className="w-4 h-4" /> Slides do Hero (Home)</span>
+          </AccordionTrigger>
+          <AccordionContent className="px-5 pb-5">
+            <HeroSlidesEditor
+              value={draft.components.hero || { slides: [], autoplay: true, intervalMs: 5000 }}
+              onChange={updateHero}
+            />
+          </AccordionContent>
+        </AccordionItem>
       </Accordion>
 
       {/* History */}
