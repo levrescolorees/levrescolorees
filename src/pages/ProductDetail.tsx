@@ -19,6 +19,7 @@ const ProductDetail = () => {
   const [quantity, setQuantity] = useState(1);
   const [selectedColor, setSelectedColor] = useState('');
   const [selectedImage, setSelectedImage] = useState(0);
+  const [showVariantImage, setShowVariantImage] = useState(false);
 
   const related = useMemo(() =>
     (allProducts ?? []).filter(p => p.id !== product?.id).slice(0, 4),
@@ -88,19 +89,25 @@ const ProductDetail = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-16">
           {/* Gallery */}
           <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="space-y-3">
-            <div className="aspect-square rounded-sm overflow-hidden bg-secondary">
-              {product.images?.[selectedImage] ? (
-                <img src={product.images[selectedImage]} alt={product.name} className="w-full h-full object-cover" />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center">
-                  <ImageIcon className="w-16 h-16 text-muted-foreground/50" />
+            {(() => {
+              const variantImg = selectedVariant?.images?.[0];
+              const displayImg = showVariantImage && variantImg ? variantImg : product.images?.[selectedImage];
+              return (
+                <div className="aspect-square rounded-sm overflow-hidden bg-secondary">
+                  {displayImg ? (
+                    <img src={displayImg} alt={product.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <ImageIcon className="w-16 h-16 text-muted-foreground/50" />
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
+              );
+            })()}
             {product.images && product.images.length > 1 && (
               <div className="grid grid-cols-4 gap-2">
                 {product.images.slice(0, 5).map((img, i) => (
-                  <button key={i} onClick={() => setSelectedImage(i)} className={`aspect-square rounded-sm overflow-hidden bg-secondary border-2 transition-colors cursor-pointer ${selectedImage === i ? 'border-primary' : 'border-transparent hover:border-primary/50'}`}>
+                  <button key={i} onClick={() => { setSelectedImage(i); setShowVariantImage(false); }} className={`aspect-square rounded-sm overflow-hidden bg-secondary border-2 transition-colors cursor-pointer ${!showVariantImage && selectedImage === i ? 'border-primary' : 'border-transparent hover:border-primary/50'}`}>
                     <img src={img} alt={product.name} className="w-full h-full object-cover" />
                   </button>
                 ))}
@@ -178,7 +185,7 @@ const ProductDetail = () => {
               <ColorSwatchPicker
                 variants={product.variants}
                 selected={color}
-                onSelect={setSelectedColor}
+                onSelect={(name) => { setSelectedColor(name); setShowVariantImage(true); }}
               />
             )}
 
