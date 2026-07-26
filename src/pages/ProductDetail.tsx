@@ -51,6 +51,7 @@ const ProductDetail = () => {
 
   const colors = product.variants.map(v => v.name);
   const color = selectedColor || colors[0] || 'Padrão';
+  const selectedVariant = product.variants.find(v => v.name === color);
   const smart = getSmartPriceFromRules(product.retail_price, product.priceRules, quantity);
 
   const box06 = getSmartPriceFromRules(product.retail_price, product.priceRules, 6);
