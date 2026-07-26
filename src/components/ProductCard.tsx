@@ -1,10 +1,11 @@
-import { memo } from 'react';
+import { memo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { Star, ShoppingBag, ImageIcon } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 import { formatCurrency, getSmartPriceFromRules } from '@/hooks/useProducts';
 import type { DBProduct, DBPriceRule, DBVariant } from '@/hooks/useProducts';
 import { useCart } from '@/context/CartContext';
-import { useAnimateOnView } from '@/hooks/useAnimateOnView';
 
 interface ProductCardProps {
   product: DBProduct & { variants: DBVariant[]; priceRules: DBPriceRule[] };
@@ -13,8 +14,25 @@ interface ProductCardProps {
 
 const ProductCard = ({ product, index = 0 }: ProductCardProps) => {
   const { addItem } = useCart();
+  const qc = useQueryClient();
   const box12 = getSmartPriceFromRules(product.retail_price, product.priceRules, 12);
-  const { ref, className: animClass } = useAnimateOnView(index * 100);
+  const eager = index < 4;
+
+  const prefetch = useCallback(() => {
+    qc.prefetchQuery({
+      queryKey: ['product', product.slug],
+      staleTime: 5 * 60_000,
+      queryFn: async () => {
+        const { data: p } = await supabase.from('products').select('*').eq('slug', product.slug).eq('is_active', true).maybeSingle();
+        if (!p) return null;
+        const [{ data: variants }, { data: priceRules }] = await Promise.all([
+          supabase.from('product_variants').select('*').eq('product_id', p.id).order('sort_order'),
+          supabase.from('price_rules').select('*').eq('product_id', p.id).eq('is_active', true).order('min_quantity'),
+        ]);
+        return { ...p, variants: variants || [], priceRules: priceRules || [] };
+      },
+    });
+  }, [qc, product.slug]);
 
   const handleAddToCart = (e: React.MouseEvent) => {
     e.preventDefault();
