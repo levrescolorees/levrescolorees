@@ -20,6 +20,7 @@ const genId = () =>
 const emptySlide = (): HeroSlide => ({
   id: genId(),
   image: '',
+  imageMobile: '',
   headline: 'Seu novo título aqui',
   subheadline: 'Fale sobre a coleção, promoção ou novidade.',
   ctaText: 'Comprar Agora',
