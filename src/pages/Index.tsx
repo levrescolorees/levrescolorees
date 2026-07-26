@@ -15,10 +15,10 @@ const ResellersTestimonials = lazy(() => import('@/components/ResellersTestimoni
 const InstagramFeed = lazy(() => import('@/components/InstagramFeed'));
 const FinalCTA = lazy(() => import('@/components/FinalCTA'));
 
-const LazySection = ({ children }: { children: React.ReactNode }) => {
+const LazySection = ({ children, minHeight = '400px' }: { children: React.ReactNode; minHeight?: string }) => {
   const { ref, isVisible } = useLazySection('200px');
   return (
-    <div ref={ref} className="min-h-[100px]">
+    <div ref={ref} style={{ contentVisibility: 'auto', containIntrinsicSize: `1px ${minHeight}` }}>
       {isVisible && <Suspense fallback={null}>{children}</Suspense>}
     </div>
   );
