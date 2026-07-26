@@ -45,6 +45,7 @@ export interface ThemeImages {
 export interface HeroSlide {
   id: string;
   image: string;
+  imageMobile?: string;
   headline: string;
   subheadline: string;
   ctaText: string;

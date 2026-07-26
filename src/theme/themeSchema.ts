@@ -77,6 +77,7 @@ export const themeSettingsSchema = z.object({
       slides: z.array(z.object({
         id: z.string(),
         image: z.string().default(''),
+        imageMobile: z.string().optional().default(''),
         headline: z.string().default(''),
         subheadline: z.string().default(''),
         ctaText: z.string().default(''),

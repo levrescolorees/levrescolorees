@@ -20,6 +20,7 @@ const genId = () =>
 const emptySlide = (): HeroSlide => ({
   id: genId(),
   image: '',
+  imageMobile: '',
   headline: 'Seu novo título aqui',
   subheadline: 'Fale sobre a coleção, promoção ou novidade.',
   ctaText: 'Comprar Agora',
@@ -150,14 +151,24 @@ export default function HeroSlidesEditor({ value, onChange }: Props) {
             </div>
           </div>
 
-          <ImageUploadRow
-            label="Imagem de fundo"
-            description="Recomendado: 1920×800px, JPG"
-            value={slide.image}
-            onChange={(url) => updateSlide(idx, { image: url })}
-            folder={`hero/slides/${slide.id}`}
-            aspect={1920 / 800}
-          />
+          <div className="grid md:grid-cols-2 gap-4">
+            <ImageUploadRow
+              label="Imagem — Desktop"
+              description="Recomendado: 1920×800px (JPG, até 500KB)"
+              value={slide.image}
+              onChange={(url) => updateSlide(idx, { image: url })}
+              folder={`hero/slides/${slide.id}`}
+              aspect={1920 / 800}
+            />
+            <ImageUploadRow
+              label="Imagem — Mobile"
+              description="Recomendado: 750×1000px (JPG, até 300KB). Opcional — se vazio, usa a desktop."
+              value={slide.imageMobile || ''}
+              onChange={(url) => updateSlide(idx, { imageMobile: url })}
+              folder={`hero/slides/${slide.id}/mobile`}
+              aspect={750 / 1000}
+            />
+          </div>
 
           <div className="grid sm:grid-cols-2 gap-3">
             <div>

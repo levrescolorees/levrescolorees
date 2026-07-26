@@ -77,17 +77,21 @@ const SlideContent = ({ slide }: { slide: HeroSlide }) => {
 };
 
 const SlideBackground = ({ slide, eager }: { slide: HeroSlide; eager: boolean }) => {
-  const image = slide.image || heroBannerDefault;
+  const desktop = slide.image || heroBannerDefault;
+  const mobile = slide.imageMobile || desktop;
   return (
     <>
-      <img
-        src={image}
-        alt={slide.headline || 'Banner'}
-        className="w-full h-full object-cover"
-        fetchPriority={eager ? 'high' : 'auto'}
-        loading={eager ? 'eager' : 'lazy'}
-        decoding="async"
-      />
+      <picture>
+        <source media="(max-width: 767px)" srcSet={mobile} />
+        <img
+          src={desktop}
+          alt={slide.headline || 'Banner'}
+          className="w-full h-full object-cover"
+          fetchPriority={eager ? 'high' : 'auto'}
+          loading={eager ? 'eager' : 'lazy'}
+          decoding="async"
+        />
+      </picture>
       <div className={`absolute inset-0 ${gradientByAlignment[slide.alignment || 'left']}`} />
     </>
   );
