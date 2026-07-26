@@ -173,21 +173,12 @@ const ProductDetail = () => {
             })()}
 
             {/* Color selector */}
-            {colors.length > 0 && (
-              <div>
-                <h3 className="font-body text-sm font-semibold text-foreground mb-3">Cor: {color}</h3>
-                <div className="flex flex-wrap gap-2">
-                  {colors.map(c => (
-                    <button
-                      key={c}
-                      onClick={() => setSelectedColor(c)}
-                      className={`px-3 py-1.5 rounded-sm text-sm font-body transition-colors ${c === color ? 'bg-primary text-primary-foreground' : 'bg-secondary text-foreground hover:bg-muted'}`}
-                    >
-                      {c}
-                    </button>
-                  ))}
-                </div>
-              </div>
+            {product.variants.length > 0 && (
+              <ColorSwatchPicker
+                variants={product.variants}
+                selected={color}
+                onSelect={setSelectedColor}
+              />
             )}
 
             {/* Quantity */}
