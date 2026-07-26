@@ -185,7 +185,7 @@ const ProductDetail = () => {
               <ColorSwatchPicker
                 variants={product.variants}
                 selected={color}
-                onSelect={setSelectedColor}
+                onSelect={(name) => { setSelectedColor(name); setShowVariantImage(true); }}
               />
             )}
 
