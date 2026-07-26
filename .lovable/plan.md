@@ -1,71 +1,70 @@
 ## Objetivo
 
-Cadastrar no catálogo o produto **Bruna Tavares BT Skin – Base Líquida Aveludada 40ml** e todas as variações (tons) listadas na página da Shopee, exatamente como se estivessem sendo criadas pelo painel `/admin`.
+Importar do site oficial (linhabrunatavares.com — VTEX) o produto **BT Skin – Base Líquida** com **todas as 30 variações de tom**, incluindo:
+- Nome do tom (ex.: F10, L20, M30, T40, D50…)
+- Subtom / família (Fair, Light, Medium, Tan, Deep)
+- Imagem do bocal (aquele círculo colorido do swatch) para cada tom
+- Imagens principais do produto (packshot, embalagem, textura)
+- Descrição oficial
 
-Parâmetros já definidos por você:
-- Preço de custo: **R$ 1,00** / Preço de venda: **R$ 1,00** (você ajusta depois, tom a tom)
-- Estoque inicial: **100** por variação
-- Dados serão **extraídos automaticamente** da URL da Shopee
+Cadastrar no `/admin/produtos` **e** deixar visível na loja pública.
 
-## Desafio de extração
+## Parâmetros
 
-A Shopee bloqueia scraping direto (o fetch retorna página vazia e a API interna retorna erro `90309999`). Precisamos de um scraper que renderize JS e contorne anti-bot. Duas rotas possíveis:
+- Custo R$ 1,00 / Venda R$ 1,00 (você ajusta depois — foi o que você pediu)
+- Estoque 100 por variação
+- `is_active: true`, `status: 'published'`, `published_at: now()` — para aparecer na loja
+- Anexar à coleção **"Mais Vendidos"** (usada pela home) e à **"Novidades"**; se não existirem, cria.
 
-1. **Firecrawl** (recomendado) – connector Lovable, retorna markdown + JSON estruturado da PDP.
-2. **Apify** com actor de Shopee – alternativa se Firecrawl não pegar variações.
+## Fonte dos dados (sem connector, sem scraper pago)
 
-Nenhum dos dois está conectado hoje no workspace, então o primeiro passo é conectar um.
+A VTEX expõe endpoints públicos JSON:
+
+- `GET /api/catalog_system/pub/products/search/bt-skin` → produto pai + todos os `items` (SKUs) com nome, imagens em alta e specifications.
+- Cada SKU tem `images[]` com o bocal/swatch (`001-<TOM>.png`) já pronto em `brunatavares.vtexassets.com`.
+- A família (Fair/Light/Medium/Tan/Deep) sai do prefixo do nome do tom: **F**→Fair, **L**→Light, **M**→Medium, **T**→Tan, **D**→Deep.
+
+Já validei que o endpoint responde e traz todos os tons numa única chamada.
 
 ## Passos
 
-1. **Conectar scraper**
-   - Abrir card `standard_connectors--connect` do **Firecrawl** (managed auth, sem BYOK).
-   - Se Firecrawl não conseguir retornar a lista de tons, cair para Apify (`connect` de Apify + actor `easyapi/shopee-product-scraper` ou similar).
+1. **Edge function `import-bt-skin`** (nova, `verify_jwt = false` no `config.toml`)
+   - Fetch da API VTEX do slug `bt-skin`.
+   - Valida resposta com Zod.
+   - Baixa 4–6 imagens principais do produto pai + 1 imagem de swatch por tom, faz upload no bucket `product-images` em `bt-skin/<slug>.jpg` (com `upsert: true`) → coleta URLs públicas Supabase.
+   - Monta e insere via `service_role`:
+     - `products` (1 linha):
+       - name: "BT Skin – Base Líquida Aveludada 40ml"
+       - slug: `bt-skin-base-liquida-40ml-<rand>`
+       - sku: `BTSKIN-40ML`
+       - retail_price: 1, cost_price: 1, stock: 0, weight: 0.08 (kg)
+       - short_description / description: extraídos da VTEX (HTML limpo com sanitização)
+       - images: URLs públicas do bucket
+       - is_active: true, status: 'published', published_at: now()
+       - badge: "Novo"
+     - `product_variants` (30 linhas — uma por tom):
+       - name: `"<Família> <Tom>"` (ex.: "Medium M30") — para o swatch/rótulo já sair legível
+       - sku: `BTSKIN-40ML-<TOM>`
+       - stock: 100, price_override: null, sort_order: índice
+       - images: `[<url pública do swatch do tom>]`
+     - `collection_products`: anexa à(s) coleção(ões) padrão (cria se faltar).
+   - Retorna `{ product_id, slug, variants_count, admin_url, storefront_url }`.
 
-2. **Extrair dados via edge function temporária** `scrape-shopee-product`
-   - Recebe a URL da Shopee.
-   - Chama Firecrawl `scrape` com `formats: [{ type: 'json', prompt: 'Extraia nome, descrição, imagens principais e lista de variações (nome do tom + imagem) do produto' }]` + `screenshot` para debug.
-   - Retorna JSON: `{ name, description, images[], variants: [{ name, image }] }`.
-   - Sem persistência ainda — só devolve o resultado para eu revisar.
+2. **Deploy + disparo** via `supabase--curl_edge_functions` (POST vazio).
 
-3. **Revisar extração**
-   - Eu confiro nomes dos tons (BT Skin costuma ter linhas F/M/D com números tipo `F10`, `M20`, `D50` etc.) e imagens capturadas.
-   - Se algum tom faltar, complemento manualmente antes de inserir.
-
-4. **Baixar imagens para o bucket `product-images`**
-   - Edge function `import-shopee-images`: faz `fetch` de cada URL de imagem da Shopee e faz `upload` no bucket `product-images` (caminho `bt-skin/<slug>-<i>.jpg`), retornando URLs públicas.
-   - Necessário porque URLs da Shopee podem expirar / ter hotlink bloqueado.
-
-5. **Inserir no banco** via `supabase--insert`
-   - `products`: 1 registro
-     - `name`: "Bruna Tavares BT Skin – Base Líquida Aveludada 40ml"
-     - `slug`: `bt-skin-base-liquida-aveludada-40ml-<sufixo aleatório>` (padrão do projeto)
-     - `sku`: `BTSKIN-40ML`
-     - `retail_price`: 1, `cost_price`: 1
-     - `stock`: 0 (estoque real fica nas variações)
-     - `weight`: 0.08 (kg) — ajustável
-     - `images`: array com URLs públicas do bucket
-     - `short_description`, `description`: texto extraído
-     - `is_active`: true, `status`: `draft` (você publica depois de ajustar preços)
-   - `product_variants`: N registros (um por tom)
-     - `name`: nome do tom (ex.: "F10", "M30")
-     - `sku`: `BTSKIN-40ML-<TOM>`
-     - `stock`: 100
-     - `price_override`: null (herda do produto)
-     - `images`: array com a imagem específica do tom (se houver)
-
-6. **Verificação**
-   - Rodar `SELECT` para confirmar produto + contagem de variações.
-   - Passar o link do produto em `/admin/produtos/<id>` para você abrir e ajustar preços.
+3. **Verificação**
+   - `SELECT` do produto + `COUNT` de variantes (esperado 30).
+   - Abro a rota `/produto/<slug>` no preview para conferir imagens/tons visíveis na loja.
+   - Confirmo que aparece no `/admin/produtos`.
 
 ## Detalhes técnicos
 
-- Edge functions ficam em `supabase/functions/scrape-shopee-product/` e `supabase/functions/import-shopee-images/`, ambas com CORS e validação Zod da URL.
-- Segredos: Firecrawl é gerenciado (gateway), então apenas `LOVABLE_API_KEY` + `FIRECRAWL_API_KEY` (injetados pelo connector).
-- Slug gerado com sufixo aleatório para respeitar o padrão de unicidade já usado na importação em lote.
-- Estoque agregado do produto pai fica 0; a página de listagem do admin já mostra soma via variantes.
-- Após confirmar sucesso, as duas edge functions ficam no projeto (úteis para próximos cadastros da Shopee); posso removê-las se preferir.
+- Sem novos secrets — usa `SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY` já existentes.
+- Bucket `product-images` já é público → URLs de swatch funcionam direto no front.
+- `stock` do produto pai fica 0 (o real está nas variantes) — comportamento igual ao cadastro manual.
+- Idempotência: função checa se já existe produto com `sku='BTSKIN-40ML'`; se sim, atualiza (upsert de imagens + variantes por SKU) em vez de duplicar.
+- Slug com sufixo aleatório só na criação — no re-run mantém o slug existente.
+- Reaproveitável: aceita `?slug=bt-skin` (ou qualquer outro slug BT) via query, então serve para trazer futuros produtos da linha depois.
+- Sem mudanças no frontend — a loja já lê `products`/`product_variants` e o `ProductCard` já mostra swatches a partir de `variants[].images[0]`.
 
-## O que preciso confirmar antes de executar
-
-Se estiver tudo ok com esse plano, ao aprovar eu já disparo o card de conexão do Firecrawl e sigo os passos.
+Ao aprovar, sigo direto: crio a função, disparo, verifico no banco e no preview, e te mando os links.
