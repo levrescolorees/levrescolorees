@@ -10,7 +10,7 @@ import { AuthProvider } from "@/hooks/useAuth";
 import ThemeProvider from "@/components/ThemeProvider";
 import { Loader2 } from 'lucide-react';
 
-// Lazy-loaded storefront routes
+// Storefront routes (lazy)
 const Index = lazy(() => import("./pages/Index"));
 const Collections = lazy(() => import("./pages/Collections"));
 const ProductDetail = lazy(() => import("./pages/ProductDetail"));
@@ -20,31 +20,32 @@ const Checkout = lazy(() => import("./pages/Checkout"));
 const OrderTracking = lazy(() => import("./pages/OrderTracking"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
-// Lazy-loaded admin shell
+// Admin shell + all pages lazy — clientes nunca baixam
 const AdminLogin = lazy(() => import("./pages/admin/AdminLogin"));
 const AdminLayout = lazy(() => import("./pages/admin/AdminLayout"));
-
-// Admin internal pages — imported directly to avoid white flash
-import Dashboard from "./pages/admin/Dashboard";
-import Products from "./pages/admin/Products";
-import ProductForm from "./pages/admin/ProductForm";
-import AdminCollections from "./pages/admin/AdminCollections";
-import AdminOrders from "./pages/admin/AdminOrders";
-import OrderDetail from "./pages/admin/OrderDetail";
-import AdminCustomers from "./pages/admin/AdminCustomers";
-import AdminCoupons from "./pages/admin/AdminCoupons";
-import AdminSettings from "./pages/admin/AdminSettings";
-import AdminMedia from "./pages/admin/AdminMedia";
-import AdminIntegrations from "./pages/admin/AdminIntegrations";
-import AdminIntegrationMercadoPago from "./pages/admin/AdminIntegrationMercadoPago";
-import AdminIntegrationSuperFrete from "./pages/admin/AdminIntegrationSuperFrete";
-import AdminThemeEditor from "./pages/admin/AdminThemeEditor";
+const Dashboard = lazy(() => import("./pages/admin/Dashboard"));
+const Products = lazy(() => import("./pages/admin/Products"));
+const ProductForm = lazy(() => import("./pages/admin/ProductForm"));
+const AdminCollections = lazy(() => import("./pages/admin/AdminCollections"));
+const AdminOrders = lazy(() => import("./pages/admin/AdminOrders"));
+const OrderDetail = lazy(() => import("./pages/admin/OrderDetail"));
+const AdminCustomers = lazy(() => import("./pages/admin/AdminCustomers"));
+const AdminCoupons = lazy(() => import("./pages/admin/AdminCoupons"));
+const AdminSettings = lazy(() => import("./pages/admin/AdminSettings"));
+const AdminMedia = lazy(() => import("./pages/admin/AdminMedia"));
+const AdminIntegrations = lazy(() => import("./pages/admin/AdminIntegrations"));
+const AdminIntegrationMercadoPago = lazy(() => import("./pages/admin/AdminIntegrationMercadoPago"));
+const AdminIntegrationSuperFrete = lazy(() => import("./pages/admin/AdminIntegrationSuperFrete"));
+const AdminThemeEditor = lazy(() => import("./pages/admin/AdminThemeEditor"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 30_000,
+      staleTime: 60_000,
+      gcTime: 30 * 60_000,
       refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+      retry: 1,
     },
   },
 });
