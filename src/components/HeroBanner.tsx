@@ -87,7 +87,7 @@ const SlideBackground = ({ slide, eager }: { slide: HeroSlide; eager: boolean })
           src={desktop}
           alt={slide.headline || 'Banner'}
           className="w-full h-full object-cover"
-          fetchPriority={eager ? 'high' : 'auto'}
+          {...({ fetchpriority: eager ? 'high' : 'auto' } as any)}
           loading={eager ? 'eager' : 'lazy'}
           decoding="async"
         />
