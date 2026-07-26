@@ -30,5 +30,5 @@ verify_jwt = false
 [functions.generate-shipping-label]
 verify_jwt = false
 
-[functions.import-bt-skin]
+[functions.import-bt-product]
 verify_jwt = false

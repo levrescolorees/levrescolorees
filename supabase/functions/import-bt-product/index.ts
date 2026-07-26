@@ -7,13 +7,50 @@ const BUCKET = 'product-images';
 
 const BESTSELLERS_ID = '0bcc3742-4542-4ad8-a5ba-abd6acc73ce3';
 const NOVIDADES_ID = '6cd35810-908a-4b2b-abdd-bb66b367f47a';
+const BRUNA_TAVARES_ID = '2579cc0c-8c9b-420b-8ca3-d078b2210ff5';
 
 const FAMILY_MAP: Record<string, string> = {
-  F: 'Fair',
-  L: 'Light',
-  M: 'Medium',
-  T: 'Tan',
-  D: 'Deep',
+  F: 'Fair', L: 'Light', M: 'Medium', T: 'Tan', D: 'Deep',
+};
+const KNOWN_FAMILIES = new Set(['Fair', 'Light', 'Medium', 'Tan', 'Deep']);
+
+// Per-product config
+const PRODUCTS: Record<string, {
+  vtexSlug: string;
+  productName: string;
+  productSku: string;
+  slugBase: string;
+  weight: number;
+  storagePrefix: string;
+  prefixToStrip: RegExp;
+}> = {
+  'bt-skin': {
+    vtexSlug: 'bt-skin',
+    productName: 'BT Skin – Base Líquida Aveludada 40ml',
+    productSku: 'BTSKIN-40ML',
+    slugBase: 'bt-skin-base-liquida-40ml',
+    weight: 0.08,
+    storagePrefix: 'bt-skin',
+    prefixToStrip: /^BT Skin\s+/i,
+  },
+  'bt-multicover': {
+    vtexSlug: 'bt-multicover',
+    productName: 'BT Multicover – Base e Corretivo Multifuncional',
+    productSku: 'BT-MULTICOVER',
+    slugBase: 'bt-multicover',
+    weight: 0.05,
+    storagePrefix: 'bt-multicover',
+    prefixToStrip: /^BT Multicover\s+/i,
+  },
+  'bt-skinpowder': {
+    vtexSlug: 'bt-skinpowder',
+    productName: 'BT Skinpowder – Pó Facial',
+    productSku: 'BT-SKINPOWDER',
+    slugBase: 'bt-skinpowder-po-facial',
+    weight: 0.05,
+    storagePrefix: 'bt-skinpowder',
+    prefixToStrip: /^BT Skinpowder\s+/i,
+  },
 };
 
 function slugify(s: string) {
@@ -23,6 +60,15 @@ function slugify(s: string) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '');
+}
+
+function buildVariantDisplayName(shade: string): string {
+  // shade e.g. "M10", "L20", "Fair", "Unique Quartz"
+  if (KNOWN_FAMILIES.has(shade)) return shade;
+  const firstChar = shade.charAt(0).toUpperCase();
+  const family = FAMILY_MAP[firstChar];
+  if (family && /^[FLMTD]\d/i.test(shade)) return `${family} ${shade}`;
+  return shade;
 }
 
 async function uploadImage(supabase: any, url: string, path: string): Promise<string> {
@@ -43,45 +89,37 @@ Deno.serve(async (req) => {
 
   try {
     const url = new URL(req.url);
-    const slug = url.searchParams.get('slug') || 'bt-skin';
+    const key = url.searchParams.get('product') || 'bt-skin';
+    const cfg = PRODUCTS[key];
+    if (!cfg) throw new Error(`Unknown product key: ${key}. Use one of ${Object.keys(PRODUCTS).join(', ')}`);
+
     const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
 
-    console.log(`[import-bt-skin] Fetching VTEX product: ${slug}`);
+    console.log(`[import-bt-product] Fetching VTEX: ${cfg.vtexSlug}`);
     const vtexRes = await fetch(
-      `https://www.linhabrunatavares.com/api/catalog_system/pub/products/search/${slug}`,
+      `https://www.linhabrunatavares.com/api/catalog_system/pub/products/search/${cfg.vtexSlug}`,
       { headers: { Accept: 'application/json' } },
     );
     if (!vtexRes.ok) throw new Error(`VTEX API error: ${vtexRes.status}`);
     const vtexArr = await vtexRes.json();
-    if (!Array.isArray(vtexArr) || vtexArr.length === 0) {
-      throw new Error('VTEX returned no products');
-    }
+    if (!Array.isArray(vtexArr) || vtexArr.length === 0) throw new Error('VTEX returned no products');
     const p = vtexArr[0];
-    console.log(`[import-bt-skin] Got product: ${p.productName} with ${p.items?.length} items`);
+    console.log(`[import-bt-product] Got ${p.productName} with ${p.items?.length} items`);
 
-    // Base product images: pick up to 6 unique from first item
+    // Base images from first item, skip the swatch (usually 001-*.png)
     const firstItemImages = (p.items?.[0]?.images || []) as any[];
-    const uniqueBaseImages = Array.from(
-      new Set(firstItemImages.map((i: any) => i.imageUrl).filter(Boolean)),
-    ).slice(0, 6) as string[];
-
-    const productSku = 'BTSKIN-40ML';
-
-    // Check if product already exists
-    const { data: existing } = await supabase
-      .from('products')
-      .select('id, slug')
-      .eq('sku', productSku)
-      .maybeSingle();
+    const baseCandidates = firstItemImages
+      .map((i: any) => i.imageUrl as string)
+      .filter(Boolean);
+    const uniqueBaseImages = Array.from(new Set(baseCandidates)).slice(0, 6);
 
     // Upload base images
-    console.log(`[import-bt-skin] Uploading ${uniqueBaseImages.length} base images`);
     const baseImageUrls: string[] = [];
     for (let i = 0; i < uniqueBaseImages.length; i++) {
       const uploaded = await uploadImage(
         supabase,
         uniqueBaseImages[i],
-        `bt-skin/base-${i}.jpg`,
+        `${cfg.storagePrefix}/base-${i}.jpg`,
       );
       baseImageUrls.push(uploaded);
     }
@@ -90,12 +128,12 @@ Deno.serve(async (req) => {
     const shortDescription = String(p.metaTagDescription || '').trim().slice(0, 500);
 
     const productPayload = {
-      name: 'BT Skin – Base Líquida Aveludada 40ml',
-      sku: productSku,
+      name: cfg.productName,
+      sku: cfg.productSku,
       retail_price: 1,
       cost_price: 1,
       stock: 0,
-      weight: 0.08,
+      weight: cfg.weight,
       short_description: shortDescription,
       description,
       images: baseImageUrls,
@@ -103,10 +141,16 @@ Deno.serve(async (req) => {
       status: 'published',
       published_at: new Date().toISOString(),
       badge: 'Novo',
-      seo_title: 'BT Skin Base Líquida Aveludada 40ml — Bruna Tavares',
+      seo_title: `${cfg.productName} — Bruna Tavares`,
       meta_description: shortDescription,
       updated_at: new Date().toISOString(),
     };
+
+    const { data: existing } = await supabase
+      .from('products')
+      .select('id, slug')
+      .eq('sku', cfg.productSku)
+      .maybeSingle();
 
     let productId: string;
     let productSlug: string;
@@ -116,9 +160,8 @@ Deno.serve(async (req) => {
       productSlug = existing.slug;
       const { error } = await supabase.from('products').update(productPayload).eq('id', productId);
       if (error) throw new Error(`Product update failed: ${error.message}`);
-      console.log(`[import-bt-skin] Updated existing product ${productId}`);
     } else {
-      productSlug = `bt-skin-base-liquida-40ml-${Math.random().toString(36).slice(2, 8)}`;
+      productSlug = `${cfg.slugBase}-${Math.random().toString(36).slice(2, 8)}`;
       const { data: inserted, error } = await supabase
         .from('products')
         .insert({ ...productPayload, slug: productSlug })
@@ -127,23 +170,17 @@ Deno.serve(async (req) => {
       if (error) throw new Error(`Product insert failed: ${error.message}`);
       productId = inserted.id;
       productSlug = inserted.slug;
-      console.log(`[import-bt-skin] Created product ${productId} (${productSlug})`);
     }
+    console.log(`[import-bt-product] Product ${productId} (${productSlug})`);
 
-    // Variants — one per tom
-    console.log(`[import-bt-skin] Processing ${p.items.length} variants`);
     let variantsCount = 0;
     for (let idx = 0; idx < p.items.length; idx++) {
       const it = p.items[idx];
       const fullName: string = it.name || `Tom ${idx + 1}`;
-      // "BT Skin F10" -> "F10"
-      const tom = fullName.replace(/^BT Skin\s+/i, '').trim();
-      const familyKey = tom.charAt(0).toUpperCase();
-      const family = FAMILY_MAP[familyKey] || 'Outro';
-      const variantSku = `BTSKIN-40ML-${tom}`;
-      const displayName = `${family} ${tom}`;
+      const shade = fullName.replace(cfg.prefixToStrip, '').trim();
+      const variantSku = `${cfg.productSku}-${slugify(shade).toUpperCase()}`;
+      const displayName = buildVariantDisplayName(shade);
 
-      // Swatch = first image (typically 001-<TOM>.png)
       const swatchUrl = it.images?.[0]?.imageUrl;
       const variantImages: string[] = [];
       if (swatchUrl) {
@@ -151,15 +188,14 @@ Deno.serve(async (req) => {
           const uploaded = await uploadImage(
             supabase,
             swatchUrl,
-            `bt-skin/tom-${slugify(tom)}.png`,
+            `${cfg.storagePrefix}/tom-${slugify(shade)}.png`,
           );
           variantImages.push(uploaded);
         } catch (e) {
-          console.error(`[import-bt-skin] Swatch upload failed for ${tom}:`, e);
+          console.error(`[import-bt-product] Swatch failed for ${shade}:`, e);
         }
       }
 
-      // Upsert variant by (product_id, sku)
       const { data: existingVariant } = await supabase
         .from('product_variants')
         .select('id')
@@ -182,16 +218,16 @@ Deno.serve(async (req) => {
           .from('product_variants')
           .update(variantPayload)
           .eq('id', existingVariant.id);
-        if (error) throw new Error(`Variant update failed (${tom}): ${error.message}`);
+        if (error) throw new Error(`Variant update (${shade}): ${error.message}`);
       } else {
         const { error } = await supabase.from('product_variants').insert(variantPayload);
-        if (error) throw new Error(`Variant insert failed (${tom}): ${error.message}`);
+        if (error) throw new Error(`Variant insert (${shade}): ${error.message}`);
       }
       variantsCount++;
     }
 
-    // Attach to collections (idempotent)
-    for (const collectionId of [BESTSELLERS_ID, NOVIDADES_ID]) {
+    // Collections
+    for (const collectionId of [BESTSELLERS_ID, NOVIDADES_ID, BRUNA_TAVARES_ID]) {
       const { data: existingLink } = await supabase
         .from('collection_products')
         .select('id')
@@ -209,20 +245,20 @@ Deno.serve(async (req) => {
       success: true,
       product_id: productId,
       slug: productSlug,
-      sku: productSku,
+      sku: cfg.productSku,
       variants_count: variantsCount,
       base_images: baseImageUrls.length,
       admin_url: `/admin/produtos/${productId}`,
       storefront_url: `/produto/${productSlug}`,
     };
-    console.log('[import-bt-skin] Done:', result);
+    console.log('[import-bt-product] Done:', result);
 
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     });
   } catch (err) {
-    console.error('[import-bt-skin] Error:', err);
+    console.error('[import-bt-product] Error:', err);
     return new Response(
       JSON.stringify({ error: String((err as Error).message || err) }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 },
