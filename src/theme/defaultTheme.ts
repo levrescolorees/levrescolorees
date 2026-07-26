@@ -128,6 +128,11 @@ export const DEFAULT_THEME: ThemeSettings = {
   components: {
     topBar: { visible: true, text: 'FRETE GRÁTIS acima de R$299 • Compre no Atacado e economize até 40%' },
     images: { logo: '', heroBanner: '' },
+    hero: {
+      slides: [],
+      autoplay: true,
+      intervalMs: 5000,
+    },
   },
   meta: {
     updatedAt: '',
