@@ -28,10 +28,14 @@ const Dashboard = () => {
     staleTime: 30_000,
     placeholderData: (prev: any) => prev,
     queryFn: async () => {
+      // Últimos 30 dias — evita puxar histórico inteiro
+      const since = new Date(Date.now() - 30 * 86400000).toISOString();
       const { data, error } = await supabase
         .from('orders')
         .select('id, status, total, created_at')
-        .order('created_at', { ascending: false });
+        .gte('created_at', since)
+        .order('created_at', { ascending: false })
+        .limit(500);
       if (error) throw error;
       return data as Array<{ id: string; status: string; total: number; created_at: string }>;
     },

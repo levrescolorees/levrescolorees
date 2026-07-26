@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Link } from 'react-router-dom';
 import { Star, ShoppingBag, ImageIcon } from 'lucide-react';
 import { formatCurrency, getSmartPriceFromRules } from '@/hooks/useProducts';
@@ -101,4 +102,4 @@ const ProductCard = ({ product, index = 0 }: ProductCardProps) => {
   );
 };
 
-export default ProductCard;
+export default memo(ProductCard);

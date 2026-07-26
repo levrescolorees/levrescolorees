@@ -59,6 +59,10 @@ export interface DBCollection {
 
 // ---- Storefront queries ----
 
+// Colunas mínimas para listagem (evita puxar `description` inteiro em toda página)
+const LIST_COLUMNS =
+  'id,name,slug,sku,short_description,retail_price,cost_price,images,rating,reviews_count,is_active,stock,badge,ideal_for_resale,suggested_margin,status,published_at,created_at,updated_at';
+
 export function useStorefrontProducts() {
   return useQuery({
     queryKey: ['products', 'storefront'],
@@ -66,27 +70,77 @@ export function useStorefrontProducts() {
     queryFn: async () => {
       const { data: products, error } = await supabase
         .from('products')
-        .select('*')
+        .select(LIST_COLUMNS)
         .eq('is_active', true)
         .order('created_at', { ascending: false });
       if (error) throw error;
 
-      const productIds = (products as DBProduct[]).map(p => p.id);
+      const list = (products as Partial<DBProduct>[]) || [];
+      const productIds = list.map(p => p.id!);
+      if (productIds.length === 0) return [];
 
       const [{ data: variants }, { data: priceRules }, { data: collectionProducts }] = await Promise.all([
-        supabase.from('product_variants').select('*').in('product_id', productIds).order('sort_order'),
+        supabase.from('product_variants').select('id,product_id,name,sku,price_override,stock,images,sort_order').in('product_id', productIds).order('sort_order'),
         supabase.from('price_rules').select('*').in('product_id', productIds).eq('is_active', true).order('min_quantity'),
-        supabase.from('collection_products').select('*, collections(*)').in('product_id', productIds),
+        supabase.from('collection_products').select('product_id, collections(id,name,slug,collection_type)').in('product_id', productIds),
       ]);
 
-      return (products as DBProduct[]).map(p => ({
-        ...p,
+      const variantsByProduct = new Map<string, DBVariant[]>();
+      (variants as DBVariant[] || []).forEach(v => {
+        const arr = variantsByProduct.get(v.product_id) || [];
+        arr.push(v);
+        variantsByProduct.set(v.product_id, arr);
+      });
+      const rulesByProduct = new Map<string, DBPriceRule[]>();
+      (priceRules as DBPriceRule[] || []).forEach(r => {
+        const arr = rulesByProduct.get(r.product_id) || [];
+        arr.push(r);
+        rulesByProduct.set(r.product_id, arr);
+      });
+      const collectionsByProduct = new Map<string, any[]>();
+      (collectionProducts as any[] || []).forEach(cp => {
+        if (!cp.collections) return;
+        const arr = collectionsByProduct.get(cp.product_id) || [];
+        arr.push(cp.collections);
+        collectionsByProduct.set(cp.product_id, arr);
+      });
+
+      return list.map(p => ({
+        ...(p as DBProduct),
+        description: '',
+        variants: variantsByProduct.get(p.id!) || [],
+        priceRules: rulesByProduct.get(p.id!) || [],
+        collections: collectionsByProduct.get(p.id!) || [],
+      }));
+    },
+  });
+}
+
+export function useFeaturedProducts(limit = 4) {
+  return useQuery({
+    queryKey: ['products', 'featured', limit],
+    staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const { data: products, error } = await supabase
+        .from('products')
+        .select(LIST_COLUMNS)
+        .eq('is_active', true)
+        .eq('badge', 'Mais Vendido')
+        .order('created_at', { ascending: false })
+        .limit(limit);
+      if (error) throw error;
+      const list = (products as Partial<DBProduct>[]) || [];
+      const ids = list.map(p => p.id!);
+      if (ids.length === 0) return [];
+      const [{ data: variants }, { data: priceRules }] = await Promise.all([
+        supabase.from('product_variants').select('id,product_id,name,sku,price_override,stock,images,sort_order').in('product_id', ids).order('sort_order'),
+        supabase.from('price_rules').select('*').in('product_id', ids).eq('is_active', true).order('min_quantity'),
+      ]);
+      return list.map(p => ({
+        ...(p as DBProduct),
+        description: '',
         variants: (variants as DBVariant[] || []).filter(v => v.product_id === p.id),
         priceRules: (priceRules as DBPriceRule[] || []).filter(r => r.product_id === p.id),
-        collections: (collectionProducts as any[] || [])
-          .filter(cp => cp.product_id === p.id)
-          .map(cp => cp.collections)
-          .filter(Boolean),
       }));
     },
   });
@@ -96,6 +150,7 @@ export function useProductBySlug(slug: string | undefined) {
   return useQuery({
     queryKey: ['product', slug],
     enabled: !!slug,
+    staleTime: 5 * 60_000,
     queryFn: async () => {
       const { data: product, error } = await supabase
         .from('products')
@@ -124,7 +179,7 @@ export function useProductBySlug(slug: string | undefined) {
 export function useCollections() {
   return useQuery({
     queryKey: ['collections'],
-    staleTime: 5 * 60_000,
+    staleTime: 10 * 60_000,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('collections')
