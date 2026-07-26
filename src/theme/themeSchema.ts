@@ -128,6 +128,7 @@ export function migrateTheme(raw: any): ThemeSettings {
       components: {
         topBar: { ...DEFAULT_THEME.components.topBar, ...raw.topBar },
         images: { ...DEFAULT_THEME.components.images, ...raw.images },
+        hero: { ...DEFAULT_THEME.components.hero },
       },
     });
     return migrated;
