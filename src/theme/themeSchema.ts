@@ -73,6 +73,22 @@ export const themeSettingsSchema = z.object({
       logo: z.string().optional().default(''),
       heroBanner: z.string().optional().default(''),
     }).optional().default({ logo: '', heroBanner: '' }),
+    hero: z.object({
+      slides: z.array(z.object({
+        id: z.string(),
+        image: z.string().default(''),
+        headline: z.string().default(''),
+        subheadline: z.string().default(''),
+        ctaText: z.string().default(''),
+        ctaLink: z.string().default(''),
+        ctaSecondaryText: z.string().optional(),
+        ctaSecondaryLink: z.string().optional(),
+        alignment: z.enum(['left', 'center', 'right']).default('left'),
+        kicker: z.string().optional(),
+      })).default([]),
+      autoplay: z.boolean().default(true),
+      intervalMs: z.number().default(5000),
+    }).optional().default({ slides: [], autoplay: true, intervalMs: 5000 }),
   }),
   meta: z.object({
     updatedAt: z.string(),
@@ -112,6 +128,7 @@ export function migrateTheme(raw: any): ThemeSettings {
       components: {
         topBar: { ...DEFAULT_THEME.components.topBar, ...raw.topBar },
         images: { ...DEFAULT_THEME.components.images, ...raw.images },
+        hero: { ...DEFAULT_THEME.components.hero },
       },
     });
     return migrated;

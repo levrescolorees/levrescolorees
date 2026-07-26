@@ -42,9 +42,29 @@ export interface ThemeImages {
   heroBanner: string;
 }
 
+export interface HeroSlide {
+  id: string;
+  image: string;
+  headline: string;
+  subheadline: string;
+  ctaText: string;
+  ctaLink: string;
+  ctaSecondaryText?: string;
+  ctaSecondaryLink?: string;
+  alignment: 'left' | 'center' | 'right';
+  kicker?: string;
+}
+
+export interface ThemeHero {
+  slides: HeroSlide[];
+  autoplay: boolean;
+  intervalMs: number;
+}
+
 export interface ThemeComponents {
   topBar: ThemeTopBar;
   images: ThemeImages;
+  hero: ThemeHero;
 }
 
 export interface ThemeMeta {
@@ -108,6 +128,11 @@ export const DEFAULT_THEME: ThemeSettings = {
   components: {
     topBar: { visible: true, text: 'FRETE GRÁTIS acima de R$299 • Compre no Atacado e economize até 40%' },
     images: { logo: '', heroBanner: '' },
+    hero: {
+      slides: [],
+      autoplay: true,
+      intervalMs: 5000,
+    },
   },
   meta: {
     updatedAt: '',
