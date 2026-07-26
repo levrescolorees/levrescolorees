@@ -29,3 +29,6 @@ verify_jwt = false
 
 [functions.generate-shipping-label]
 verify_jwt = false
+
+[functions.import-bt-skin]
+verify_jwt = false
