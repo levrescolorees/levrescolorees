@@ -6,6 +6,7 @@ import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import CartDrawer from '@/components/CartDrawer';
 import ProductCard from '@/components/ProductCard';
+import ColorSwatchPicker from '@/components/ColorSwatchPicker';
 import { useProductBySlug, useStorefrontProducts, formatCurrency, getSmartPriceFromRules } from '@/hooks/useProducts';
 import { useCart } from '@/context/CartContext';
 import WhatsAppButton from '@/components/WhatsAppButton';
