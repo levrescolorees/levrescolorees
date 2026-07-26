@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Save, RotateCcw, Palette, Type, SlidersHorizontal, MessageSquare, Download, Upload, History, Check, ImageIcon } from 'lucide-react';
+import { Save, RotateCcw, Palette, Type, SlidersHorizontal, MessageSquare, Download, Upload, History, Check, ImageIcon, Images } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useStoreSettings } from '@/hooks/useStoreSettings';
