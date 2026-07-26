@@ -19,6 +19,7 @@ const ProductDetail = () => {
   const [quantity, setQuantity] = useState(1);
   const [selectedColor, setSelectedColor] = useState('');
   const [selectedImage, setSelectedImage] = useState(0);
+  const [showVariantImage, setShowVariantImage] = useState(false);
 
   const related = useMemo(() =>
     (allProducts ?? []).filter(p => p.id !== product?.id).slice(0, 4),
