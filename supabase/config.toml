@@ -32,3 +32,6 @@ verify_jwt = false
 
 [functions.import-bt-product]
 verify_jwt = false
+
+[functions.import-epoca-product]
+verify_jwt = false
