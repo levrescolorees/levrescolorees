@@ -510,9 +510,23 @@ const Products = () => {
                     />
                   </td>
                   <td className="px-4 py-3">
-                    <div>
-                      <p className="font-body text-sm font-medium text-foreground">{p.name}</p>
-                      {p.badge && <span className="text-[10px] font-body font-bold text-primary">{p.badge}</span>}
+                    <div className="flex items-center gap-3">
+                      {p.thumbnail ? (
+                        <img
+                          src={p.thumbnail}
+                          alt={p.name}
+                          loading="lazy"
+                          className="w-12 h-12 rounded-md object-cover border border-border flex-shrink-0 bg-muted"
+                        />
+                      ) : (
+                        <div className="w-12 h-12 rounded-md border border-border bg-muted flex items-center justify-center flex-shrink-0">
+                          <Image className="w-4 h-4 text-muted-foreground/60" />
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <p className="font-body text-sm font-medium text-foreground truncate">{p.name}</p>
+                        {p.badge && <span className="text-[10px] font-body font-bold text-primary">{p.badge}</span>}
+                      </div>
                     </div>
                   </td>
                   <td className="px-4 py-3 font-body text-sm text-muted-foreground">{p.sku || '—'}</td>
