@@ -1,99 +1,47 @@
+## Objetivo
 
-# Auditoria de Performance — Lèvres Colorées
+Adicionar ao catálogo estes **4 produtos Boca Rosa** via API pública VTEX da Época Cosméticos (o bloqueio anti-bot afeta as páginas HTML, mas o endpoint JSON responde normal):
 
-Objetivo: reduzir tempo de carregamento inicial, eliminar travamentos ao navegar e cortar re-renders/queries desnecessárias, tanto na loja quanto no painel admin.
+| # | Produto | Variantes |
+|---|---|---|
+| 1 | **Base Mate Boca Rosa Beauty by Payot** | 8 (01 Maria, 02 Ana, 03 Francisca, 04 Antonia, 05 Adriana, 06 Juliana, 07 Marcia, 09 Aline) |
+| 2 | **Corretivo Líquido Payot Boca Rosa Beauty** | 3 (Orquídea, Iris, Petunia) |
+| 3 | **Máscara para Cílios #MeuVolumão Boca Rosa – Preto 6g** | sem variantes |
+| 4 | **Pó Solto Facial Payot Boca Rosa Beauty** | 3 (1/2/3 Mármore) |
 
-## Problemas identificados
+Situação: **19 produtos hoje → 23 depois desta importação**.
 
-**Bundle & carregamento**
-- `vite.config.ts` não faz manualChunks — tudo (Radix, Recharts, Framer Motion, Embla, react-easy-crop, react-day-picker) vai num bundle único.
-- Rotas admin usam `import` direto (não lazy), então quem abre a loja baixa Dashboard, Recharts, ProductForm, ThemeEditor, etc.
-- `framer-motion` (~120 kB) e `recharts` (~300 kB) carregados em rotas que não precisam.
-- Sem preconnect para Supabase/fontes; sem preload da imagem LCP do hero.
-- `hero-banner.jpg` = 299 kB (sem AVIF/WebP), PDFs de logo (760 kB) em `src/assets` desnecessários no bundle.
-- `<title>` genérico "levres" e `og:description` "Lovable Generated Project".
+## Como
 
-**Queries & dados**
-- `useStorefrontProducts` traz TODOS os produtos + variantes + price_rules + collection_products em toda página que usa (Index, Collections, ProductDetail via CartContext, etc.). Sem paginação, sem `select` de colunas específicas — puxa `description` inteiro de todo produto.
-- `FeaturedProducts` chama `useStorefrontProducts` só para filtrar 4 destaques.
-- `ProductDetail` não usa o cache do listing — refaz query por slug.
-- Sem índices dedicados? Verificar `products(is_active, created_at)`, `product_variants(product_id, sort_order)`, `price_rules(product_id, is_active)`, `collection_products(product_id)`.
-- Admin `useAdminProducts` (sem paginação) coexiste com `useAdminProductsList` (paginado). Precisa remover chamadas do não-paginado.
+Nova edge function `supabase/functions/import-epoca-product/index.ts` seguindo o mesmo padrão da `import-bt-product` já existente:
 
-**Renderização**
-- `Index` renderiza `HeroBanner` + `BenefitsSection` + `FeaturedProducts` sem LazySection, mas o resto usa `useLazySection('200px')` — ok.
-- `ProductCard` usa `useAnimateOnView` com delay `index*100` — ok.
-- `ThemeProvider` provavelmente reaplica CSS vars a cada render — validar.
-- Falta `React.memo` em `ProductCard` e memoização do filtro em `Collections`.
+- Recebe `?slug=xxx` na query
+- Faz `fetch` em `https://www.epocacosmeticos.com.br/api/catalog_system/pub/products/search/{slug}/p` com `User-Agent: Mozilla/5.0`
+- Baixa imagens principais + de cada variante (usadas também como swatch no seletor de cores)
+- Upload no bucket `product-images/boca-rosa/{slug}/...`
+- Upsert em `products` (SKU baseado no slug) e `product_variants` (nome do tom vem de `item.name`)
+- Registra `verify_jwt = false` em `supabase/config.toml`
 
-**Imagens**
-- Imagens de produto vindas do Supabase Storage sem transformação (sem `?width=`), sem `srcSet`, sem `decoding="async"`, sem `fetchpriority` no LCP.
-- Swatches carregados todos de uma vez no `ColorSwatchPicker`.
+## Coleções
 
-**CSS/Fonts**
-- CSP permite `fonts.googleapis.com` mas não há `<link rel="preconnect">` — cada fonte custa handshake.
+- Cria/vincula à nova coleção **"Boca Rosa"** (marca)
+- Vincula também em **Novidades**
 
-## Plano de ação
+## Configuração padrão aplicada aos 4
 
-### 1. Bundle & code-splitting
-- Adicionar `manualChunks` em `vite.config.ts`: `react-vendor`, `radix`, `charts` (recharts), `motion` (framer), `carousel` (embla), `supabase`, `forms` (react-hook-form + zod).
-- Converter TODAS as rotas admin em `lazy()` em `src/App.tsx` (Dashboard, Products, ProductForm, AdminOrders, OrderDetail, AdminCustomers, AdminCoupons, AdminSettings, AdminMedia, AdminIntegrations*, AdminThemeEditor, AdminCollections).
-- Lazy-load `ProfitCalculator`, `CartDrawer`, `WhatsAppButton`, `ThemeEditor`, `HeroSlidesEditor`, `ImageCropModal`.
-- Trocar imports de `framer-motion` por versão pontual (`import { motion } from "framer-motion"`) e remover onde só há fade CSS (Login, ProductCard).
-- Remover `logo-bg.pdf` e `logo-text.pdf` de `src/assets` (não são importados como asset web).
+- Preço varejo/custo: **R$ 13,99** (ajustável no admin depois)
+- Estoque: **100 por variante**
+- Peso: **0,05 kg** (ajustável)
+- Badge: **Novo**
+- Status: publicado e ativo
 
-### 2. HTML head
-- Corrigir `<title>` para "Lèvres Colorées — Cosméticos" e `og:description` real.
-- Adicionar `<link rel="preconnect" href="https://jefuidilwgzsnifjgdaf.supabase.co">` e `preconnect` para fonts.
-- Adicionar `<link rel="preload" as="image">` para a primeira imagem do hero (via slide desktop salvo).
+## Execução
 
-### 3. Queries Supabase
-- `useStorefrontProducts`: `select` explícito das colunas necessárias para listagem (sem `description` longo); manter cache 5min.
-- Novo hook `useFeaturedProducts` que chama endpoint reduzido (só produtos com badge 'Mais Vendido', limit 4).
-- `useProductBySlug`: já ok, adicionar `select` explícito.
-- Substituir usos remanescentes de `useAdminProducts` por `useAdminProductsList`.
-- Migração SQL: criar índices se ausentes — `products(is_active, created_at DESC)`, `product_variants(product_id, sort_order)`, `price_rules(product_id, is_active)`, `collection_products(product_id)`, `orders(created_at DESC)`, `orders(customer_id)`.
-- Rodar `supabase--slow_queries` para confirmar hotspots antes/depois.
+1. Deploy automático da função ao commitar.
+2. Disparo de 4 chamadas (uma por slug) via `supabase--curl_edge_functions`.
+3. Validação abrindo `/produto/{slug}` na loja e conferindo variantes no admin.
 
-### 4. Imagens
-- Utilitário `getStorageImage(url, {width, quality})` usando o Supabase Image Transformation (`?width=…&quality=75`).
-- `ProductCard`: `srcSet` (400/800), `sizes`, `loading="lazy"`, `decoding="async"`; primeiro card acima da dobra recebe `fetchpriority="high"`.
-- `HeroBanner`: usar `<picture>` com `fetchpriority="high"` no primeiro slide, `loading="lazy"` nos demais.
-- `ColorSwatchPicker`: `loading="lazy"` em todos os swatches; renderizar só a família ativa depois de troca (já filtra — reforçar).
+## O que NÃO faço
 
-### 5. Render/estado
-- `React.memo` em `ProductCard`, `ColorSwatchPicker`.
-- `useMemo` no filtro de coleções em `Collections.tsx` e no cálculo de `featured`.
-- Revisar `ThemeProvider` para aplicar CSS vars só quando `settings` mudar (deps corretas).
-- Retirar `useAnimateOnView` de acima-da-dobra para não bloquear paint.
-
-### 6. React Query
-- Setar `gcTime: 30min`, manter `staleTime: 30s` global; hooks de catálogo em 5min.
-- Ativar `refetchOnReconnect: false` onde faz sentido.
-
-### 7. Medição
-- Antes/depois: `du -sh dist/assets/*.js | sort -h`, contagem de chunks, tamanhos gzip.
-- Rodar `slow_queries` no Supabase para validar índices.
-
-## Detalhes técnicos (para referência)
-
-```text
-vite.config.ts
-  build: {
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          "react-vendor": ["react","react-dom","react-router-dom"],
-          "radix": [/* todos @radix-ui/* usados */],
-          "charts": ["recharts"],
-          "motion": ["framer-motion"],
-          "carousel": ["embla-carousel-react","embla-carousel-autoplay"],
-          "supabase": ["@supabase/supabase-js","@tanstack/react-query"],
-          "forms": ["react-hook-form","@hookform/resolvers","zod"],
-        }
-      }
-    }
-  }
-```
-
-Fora de escopo: reescrever design, mudar stack, alterar regras de negócio, mexer em edge functions (checkout, MP, SuperFrete, email-worker permanecem como estão).
+- Não altero nenhum dos 19 produtos existentes.
+- Não sigo com os produtos do PDF anterior neste plano (fica separado).
