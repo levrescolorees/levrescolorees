@@ -347,7 +347,7 @@ const ProductForm = () => {
             errors={errors}
             onChange={(f, v) => updateField(f, v)}
           />
-          <VariantsCard variants={variants} onChange={setVariants} />
+          <VariantsCard variants={variants} productId={id ?? null} onChange={setVariants} />
           <PriceRulesCard priceRules={priceRules} retailPrice={form.retail_price} onChange={setPriceRules} />
           <ShippingDimensionsCard
             weight={form.weight} height={form.height} width={form.width} length={form.length}
