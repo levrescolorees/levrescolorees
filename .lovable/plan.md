@@ -1,47 +1,41 @@
 ## Objetivo
 
-Adicionar ao catálogo estes **4 produtos Boca Rosa** via API pública VTEX da Época Cosméticos (o bloqueio anti-bot afeta as páginas HTML, mas o endpoint JSON responde normal):
+Mostrar imagens no admin em dois pontos, e permitir trocar as imagens das variantes por lá.
 
-| # | Produto | Variantes |
-|---|---|---|
-| 1 | **Base Mate Boca Rosa Beauty by Payot** | 8 (01 Maria, 02 Ana, 03 Francisca, 04 Antonia, 05 Adriana, 06 Juliana, 07 Marcia, 09 Aline) |
-| 2 | **Corretivo Líquido Payot Boca Rosa Beauty** | 3 (Orquídea, Iris, Petunia) |
-| 3 | **Máscara para Cílios #MeuVolumão Boca Rosa – Preto 6g** | sem variantes |
-| 4 | **Pó Solto Facial Payot Boca Rosa Beauty** | 3 (1/2/3 Mármore) |
+1. **Lista de produtos** (`/admin/produtos`): thumbnail pequeno ao lado do nome do produto na coluna já existente (que hoje aparece vazia no seu print).
+2. **Editor de produto → Variantes**: cada variante mostra suas imagens (miniaturas) e permite upload/remoção/reordenação — como o card de Mídia principal, só que dentro de cada variante.
 
-Situação: **19 produtos hoje → 23 depois desta importação**.
+## O que muda
 
-## Como
+### 1. Thumbnail na lista de produtos
+- Em `src/pages/admin/Products.tsx`, na coluna já reservada entre "PRODUTO" e "SKU", renderizar `<img src={row.thumbnail}>` 48×48px, `rounded-md`, `object-cover`, com fallback (ícone `ImageIcon`) quando o produto não tem imagem.
+- O RPC `admin_products_list` já devolve `thumbnail` (primeira imagem do produto) — nenhum ajuste de backend.
+- Adicionar `loading="lazy"` para não pesar em catálogos grandes.
 
-Nova edge function `supabase/functions/import-epoca-product/index.ts` seguindo o mesmo padrão da `import-bt-product` já existente:
+### 2. Imagens por variante (visualizar + editar)
+- Em `src/components/admin/product-editor/VariantsCard.tsx`:
+  - **Header do accordion (fechado)**: mostrar um mini strip com até 3 thumbnails (16×16) + contador "+N" quando a variante tem mais. Se não tiver imagem, mostrar um placeholder discreto.
+  - **Accordion aberto**: nova seção "Imagens da variante" abaixo dos campos existentes, com:
+    - Grid de miniaturas (mesma UX do `MediaCard`: drag-to-reorder, botão remover com confirmação, badge "Principal" na primeira).
+    - Botão/área "Adicionar imagens" que faz upload múltiplo para `product-images/{productId||temp}/variants/{variantId||idx}/…` via `supabase.storage`.
+    - Colar URL externa (input opcional "Adicionar por URL") — útil pra reusar links já existentes.
+- Extrair a lógica de upload/reorder/remoção em um subcomponente enxuto `VariantImageManager` (dentro do próprio arquivo `VariantsCard.tsx` ou em `variant-editor/VariantImages.tsx`) para não duplicar código com o `MediaCard`.
+- O array `images` já existe no tipo `VariantRow` e no schema `product_variants.images` — o save do produto já persiste. Sem migração.
 
-- Recebe `?slug=xxx` na query
-- Faz `fetch` em `https://www.epocacosmeticos.com.br/api/catalog_system/pub/products/search/{slug}/p` com `User-Agent: Mozilla/5.0`
-- Baixa imagens principais + de cada variante (usadas também como swatch no seletor de cores)
-- Upload no bucket `product-images/boca-rosa/{slug}/...`
-- Upsert em `products` (SKU baseado no slug) e `product_variants` (nome do tom vem de `item.name`)
-- Registra `verify_jwt = false` em `supabase/config.toml`
+### Detalhes técnicos
+- Upload usa o mesmo bucket público `product-images` já em uso pelo `MediaCard`.
+- Caminho: `${productId || 'temp/'+Date.now()}/variants/${variantIdx}/${timestamp}_${rand}.${ext}` — evita colidir com as imagens principais do produto.
+- Reordenação por drag-and-drop nativo (mesmo padrão do `MediaCard`).
+- Tudo em PT-BR, seguindo tokens semânticos do design system (nada de `text-white`/`bg-black` fixos).
 
-## Coleções
+## O que não muda
 
-- Cria/vincula à nova coleção **"Boca Rosa"** (marca)
-- Vincula também em **Novidades**
+- Nenhuma alteração no storefront, no schema do banco, nas edge functions ou nas coleções.
+- Nenhuma mudança no fluxo de save do produto (o `ProductForm` já envia `variants[].images`).
+- Preços, estoque, badge — intocados.
 
-## Configuração padrão aplicada aos 4
+## Validação
 
-- Preço varejo/custo: **R$ 13,99** (ajustável no admin depois)
-- Estoque: **100 por variante**
-- Peso: **0,05 kg** (ajustável)
-- Badge: **Novo**
-- Status: publicado e ativo
-
-## Execução
-
-1. Deploy automático da função ao commitar.
-2. Disparo de 4 chamadas (uma por slug) via `supabase--curl_edge_functions`.
-3. Validação abrindo `/produto/{slug}` na loja e conferindo variantes no admin.
-
-## O que NÃO faço
-
-- Não altero nenhum dos 19 produtos existentes.
-- Não sigo com os produtos do PDF anterior neste plano (fica separado).
+- Build completo do projeto.
+- Abrir `/admin/produtos`: confirmar thumbnails na coluna.
+- Abrir um produto com variantes (ex.: BT Multicover): confirmar strip fechado, expandir uma variante, subir imagem nova, salvar, recarregar e confirmar que persistiu.
