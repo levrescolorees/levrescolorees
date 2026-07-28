@@ -53,9 +53,18 @@ function extractLd(html: string): Record<string, any> | null {
   return null;
 }
 
+// Only images inside the product gallery carousel belong to this SKU.
+// Anything else on the page (related products, banners) must be ignored.
 function extractImages(html: string): string[] {
-  const found = html.match(/https:\/\/static\.cdnlive\.com\.br\/uploads\/790\/produto\/[\w-]+\.(?:png|jpg|jpeg|webp)/g) || [];
-  return Array.from(new Set(found));
+  const start = html.indexOf('product-gallery__carousel');
+  if (start === -1) return [];
+  const end = html.indexOf('</section>', start);
+  const segment = html.slice(start, end === -1 ? undefined : end);
+  const found = Array.from(segment.matchAll(/data-image="([^"]+)"/g)).map((m) => m[1]);
+  const normalized = found
+    .map((u) => (u.startsWith('//') ? `https:${u}` : u))
+    .filter((u) => !/_detalhe\./.test(u));
+  return Array.from(new Set(normalized));
 }
 
 async function uploadImage(supabase: any, url: string, path: string): Promise<string> {
@@ -93,21 +102,18 @@ Deno.serve(async (req) => {
     const shortDescription = description.slice(0, 300);
     const weight = Number(firstLd?.weight?.value) || 0.061;
 
-    // 2. Unique per-shade image = first image of each page; shared images = present on all pages
-    const shadePrimary = new Map<string, string>();
-    const counts = new Map<string, number>();
-    for (const s of scraped) {
-      if (s.images[0]) shadePrimary.set(s.sku, s.images[0]);
-      for (const img of s.images) counts.set(img, (counts.get(img) || 0) + 1);
-    }
-    const sharedImages = Array.from(counts.entries())
-      .filter(([, c]) => c === scraped.length)
-      .map(([img]) => img);
+    // 2. Each shade page has its own gallery — all of those images belong to that shade
+    const shadeImages = new Map<string, string[]>();
+    for (const s of scraped) shadeImages.set(s.sku, s.images);
 
-    // 3. Upload product gallery: first shade packshot + shared campaign images
+    // 3. Product gallery = every shade's own images, in variant order (no cross-product images)
     const galleryUrls: string[] = [];
-    const firstShadeImg = shadePrimary.get(cfg.variants[0].sku);
-    const gallerySources = [...(firstShadeImg ? [firstShadeImg] : []), ...sharedImages.filter((i) => i !== firstShadeImg)];
+    const gallerySources: string[] = [];
+    for (const v of cfg.variants) {
+      for (const img of shadeImages.get(v.sku) || []) {
+        if (!gallerySources.includes(img)) gallerySources.push(img);
+      }
+    }
     for (let i = 0; i < gallerySources.length; i++) {
       const ext = gallerySources[i].split('.').pop()!.split('?')[0];
       galleryUrls.push(await uploadImage(supabase, gallerySources[i], `${cfg.storagePrefix}/base-${i}.${ext}`));
@@ -163,12 +169,14 @@ Deno.serve(async (req) => {
     let variantsCount = 0;
     for (let idx = 0; idx < scraped.length; idx++) {
       const s = scraped[idx];
-      const src = shadePrimary.get(s.sku);
+      const srcs = shadeImages.get(s.sku) || [];
       const variantImages: string[] = [];
-      if (src) {
+      for (let i = 0; i < srcs.length; i++) {
         try {
-          const ext = src.split('.').pop()!.split('?')[0];
-          variantImages.push(await uploadImage(supabase, src, `${cfg.storagePrefix}/tom-${slugify(s.shade)}.${ext}`));
+          const ext = srcs[i].split('.').pop()!.split('?')[0];
+          variantImages.push(
+            await uploadImage(supabase, srcs[i], `${cfg.storagePrefix}/tom-${slugify(s.shade)}-${i}.${ext}`),
+          );
         } catch (e) {
           console.error(`[import-melu] Image failed for ${s.shade}:`, e);
         }
