@@ -530,8 +530,42 @@ const Products = () => {
                     </div>
                   </td>
                   <td className="px-4 py-3 font-body text-sm text-muted-foreground">{p.sku || '—'}</td>
-                  <td className="px-4 py-3 font-body text-sm text-foreground">{formatCurrency(p.retail_price)}</td>
-                  <td className="px-4 py-3 font-body text-sm text-foreground">{p.stock}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-1">
+                      <InlineEditCell
+                        value={Number(p.retail_price)}
+                        display={formatCurrency(p.retail_price)}
+                        type="currency"
+                        saving={savingCell === `${p.id}:retail_price`}
+                        onSave={v => inlineUpdate.mutate(
+                          { id: p.id, name: p.name, field: 'retail_price', oldValue: Number(p.retail_price), newValue: v },
+                          {
+                            onMutate: () => setSavingCell(`${p.id}:retail_price`),
+                            onSuccess: () => { setSavingCell(null); toast.success('Preço atualizado'); },
+                            onError: (e: any) => { setSavingCell(null); toast.error(e.message || 'Erro ao atualizar preço'); },
+                          },
+                        )}
+                      />
+                      <ProductAuditPopover productId={p.id} />
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <InlineEditCell
+                      value={Number(p.stock)}
+                      display={String(p.stock)}
+                      type="integer"
+                      saving={savingCell === `${p.id}:stock`}
+                      onSave={v => inlineUpdate.mutate(
+                        { id: p.id, name: p.name, field: 'stock', oldValue: Number(p.stock), newValue: v },
+                        {
+                          onMutate: () => setSavingCell(`${p.id}:stock`),
+                          onSuccess: () => { setSavingCell(null); toast.success('Estoque atualizado'); },
+                          onError: (e: any) => { setSavingCell(null); toast.error(e.message || 'Erro ao atualizar estoque'); },
+                        },
+                      )}
+                    />
+                  </td>
+
                   <td className="px-4 py-3 font-body text-sm text-muted-foreground">{p.variants_count} cores</td>
                   <td className="px-4 py-3">
                     <button
