@@ -544,14 +544,16 @@ const Products = () => {
                         display={formatCurrency(p.retail_price)}
                         type="currency"
                         saving={savingCell === `${p.id}:retail_price`}
-                        onSave={v => inlineUpdate.mutate(
-                          { id: p.id, name: p.name, field: 'retail_price', oldValue: Number(p.retail_price), newValue: v },
-                          {
-                            onMutate: () => setSavingCell(`${p.id}:retail_price`),
-                            onSuccess: () => { setSavingCell(null); toast.success('Preço atualizado'); },
-                            onError: (e: any) => { setSavingCell(null); toast.error(e.message || 'Erro ao atualizar preço'); },
-                          },
-                        )}
+                        onSave={v => {
+                          setSavingCell(`${p.id}:retail_price`);
+                          inlineUpdate.mutate(
+                            { id: p.id, name: p.name, field: 'retail_price', oldValue: Number(p.retail_price), newValue: v },
+                            {
+                              onSuccess: () => { setSavingCell(null); toast.success('Preço atualizado'); },
+                              onError: (e: any) => { setSavingCell(null); toast.error(e.message || 'Erro ao atualizar preço'); },
+                            },
+                          );
+                        }}
                       />
                       <ProductAuditPopover productId={p.id} />
                     </div>
@@ -562,14 +564,17 @@ const Products = () => {
                       display={String(p.stock)}
                       type="integer"
                       saving={savingCell === `${p.id}:stock`}
-                      onSave={v => inlineUpdate.mutate(
-                        { id: p.id, name: p.name, field: 'stock', oldValue: Number(p.stock), newValue: v },
-                        {
-                          onMutate: () => setSavingCell(`${p.id}:stock`),
-                          onSuccess: () => { setSavingCell(null); toast.success('Estoque atualizado'); },
-                          onError: (e: any) => { setSavingCell(null); toast.error(e.message || 'Erro ao atualizar estoque'); },
-                        },
-                      )}
+                      onSave={v => {
+                        setSavingCell(`${p.id}:stock`);
+                        inlineUpdate.mutate(
+                          { id: p.id, name: p.name, field: 'stock', oldValue: Number(p.stock), newValue: v },
+                          {
+                            onSuccess: () => { setSavingCell(null); toast.success('Estoque atualizado'); },
+                            onError: (e: any) => { setSavingCell(null); toast.error(e.message || 'Erro ao atualizar estoque'); },
+                          },
+                        );
+                      }}
+
                     />
                   </td>
 
