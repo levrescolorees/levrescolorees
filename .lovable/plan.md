@@ -1,41 +1,45 @@
-## Objetivo
+## O que vou cadastrar
 
-Mostrar imagens no admin em dois pontos, e permitir trocar as imagens das variantes por lá.
+Dados confirmados direto do site da Melu (JSON-LD estruturado, sem bloqueio de bot):
 
-1. **Lista de produtos** (`/admin/produtos`): thumbnail pequeno ao lado do nome do produto na coluna já existente (que hoje aparece vazia no seu print).
-2. **Editor de produto → Variantes**: cada variante mostra suas imagens (miniaturas) e permite upload/remoção/reordenação — como o card de Mídia principal, só que dentro de cada variante.
+**1 produto:** Pó Solto Areia das Dunas — Melu Ruby Rose
+- Descrição oficial: "Transforme sua maquiagem com o pó solto Areia das Dunas... textura aveludada e natural, alta fixação, acabamento soft focus..."
+- Peso: 61 g (0,061 kg) — já vem do site, usado no cálculo do SuperFrete
+- Preço de venda: **R$ 8,90** | Custo: R$ 1,00 (placeholder, ajustável no admin)
+- Estoque: 100 por variante | Badge: "Novo" | Status: publicado
 
-## O que muda
+**3 variantes (tons):**
 
-### 1. Thumbnail na lista de produtos
-- Em `src/pages/admin/Products.tsx`, na coluna já reservada entre "PRODUTO" e "SKU", renderizar `<img src={row.thumbnail}>` 48×48px, `rounded-md`, `object-cover`, com fallback (ícone `ImageIcon`) quando o produto não tem imagem.
-- O RPC `admin_products_list` já devolve `thumbnail` (primeira imagem do produto) — nenhum ajuste de backend.
-- Adicionar `loading="lazy"` para não pesar em catálogos grandes.
+| Tom | SKU | EAN |
+|---|---|---|
+| Horizonte Místico | RRM404-1 | 7897840306118 |
+| Encanto das Pedras | RRM404-3 | 7897840306132 |
+| Calor do Nordeste | RRM404-4 | 7897840306149 |
 
-### 2. Imagens por variante (visualizar + editar)
-- Em `src/components/admin/product-editor/VariantsCard.tsx`:
-  - **Header do accordion (fechado)**: mostrar um mini strip com até 3 thumbnails (16×16) + contador "+N" quando a variante tem mais. Se não tiver imagem, mostrar um placeholder discreto.
-  - **Accordion aberto**: nova seção "Imagens da variante" abaixo dos campos existentes, com:
-    - Grid de miniaturas (mesma UX do `MediaCard`: drag-to-reorder, botão remover com confirmação, badge "Principal" na primeira).
-    - Botão/área "Adicionar imagens" que faz upload múltiplo para `product-images/{productId||temp}/variants/{variantId||idx}/…` via `supabase.storage`.
-    - Colar URL externa (input opcional "Adicionar por URL") — útil pra reusar links já existentes.
-- Extrair a lógica de upload/reorder/remoção em um subcomponente enxuto `VariantImageManager` (dentro do próprio arquivo `VariantsCard.tsx` ou em `variant-editor/VariantImages.tsx`) para não duplicar código com o `MediaCard`.
-- O array `images` já existe no tipo `VariantRow` e no schema `product_variants.images` — o save do produto já persiste. Sem migração.
+Cada tom tem sua própria foto do potinho (imagem exclusiva), e há 4 imagens de campanha compartilhadas que vão para a galeria principal do produto.
 
-### Detalhes técnicos
-- Upload usa o mesmo bucket público `product-images` já em uso pelo `MediaCard`.
-- Caminho: `${productId || 'temp/'+Date.now()}/variants/${variantIdx}/${timestamp}_${rand}.${ext}` — evita colidir com as imagens principais do produto.
-- Reordenação por drag-and-drop nativo (mesmo padrão do `MediaCard`).
-- Tudo em PT-BR, seguindo tokens semânticos do design system (nada de `text-white`/`bg-black` fixos).
+## Como vou fazer
+
+1. **Coleção nova "Ruby Rose / Melu"** via migração (não existe hoje no banco — só existem Blow, Boca Rosa, Bruna Tavares, Mais Vendidos, Mari Maria, Novidades). O produto será vinculado a ela.
+2. **Nova edge function `import-melu-product`** (mesmo padrão das `import-bt-product` / `import-epoca-product`):
+   - Faz fetch das 3 páginas de produto e lê o bloco JSON-LD (nome, descrição, peso, EAN) + extrai a galeria de imagens `_zoom`.
+   - Baixa as imagens e sobe para o bucket `product-images` em `melu-areia-das-dunas/…` (nada de hotlink no CDN de terceiro).
+   - Faz upsert do produto por SKU (`RRM404`) e das 3 variantes por SKU — rodar de novo não duplica.
+   - Vincula à coleção Ruby Rose / Melu.
+   - Registra em `supabase/config.toml` com `verify_jwt = false`, como as outras funções de importação.
+3. Disparo a função e confirmo o resultado no banco.
+
+## Detalhes técnicos
+
+- A imagem exclusiva de cada tom vai em `product_variants.images[0]`, então o seletor de cores (`ColorSwatchPicker`) já mostra as 3 bolinhas automaticamente na página do produto.
+- Galeria do produto (`products.images`): packshot do Horizonte Místico + as 4 imagens de campanha.
+- Não há mapeamento de família de pele aqui (não é base), então o picker mostra apenas os 3 tons sem os filtros Fair/Light/etc.
 
 ## O que não muda
 
-- Nenhuma alteração no storefront, no schema do banco, nas edge functions ou nas coleções.
-- Nenhuma mudança no fluxo de save do produto (o `ProductForm` já envia `variants[].images`).
-- Preços, estoque, badge — intocados.
+Nenhum produto existente, nenhum componente de front-end, nenhuma alteração de checkout/frete. Catálogo vai de 23 para 24 produtos.
 
 ## Validação
 
-- Build completo do projeto.
-- Abrir `/admin/produtos`: confirmar thumbnails na coluna.
-- Abrir um produto com variantes (ex.: BT Multicover): confirmar strip fechado, expandir uma variante, subir imagem nova, salvar, recarregar e confirmar que persistiu.
+- Conferir no admin `/admin/produtos`: produto com thumbnail e 3 variantes com imagem.
+- Conferir na loja: página do produto com os 3 tons selecionáveis e a foto trocando ao clicar.
