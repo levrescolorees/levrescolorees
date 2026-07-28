@@ -19,6 +19,10 @@ import {
 } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import BulkImageUpload from '@/components/admin/BulkImageUpload';
+import InlineEditCell from '@/components/admin/InlineEditCell';
+import ProductAuditPopover from '@/components/admin/ProductAuditPopover';
+import { useInlineProductUpdate } from '@/hooks/useInlineProductUpdate';
+
 
 /* ── CSV helpers ── */
 // ... keep existing code (detectSeparator, parseCSVLine, parsePrice, findCol, ParsedRow, parseRows, downloadTemplate — lines 24-165)
@@ -201,6 +205,9 @@ const Products = () => {
   const { data: collections } = useCollections();
   const deleteProduct = useDeleteProduct();
   const toggleProduct = useToggleProduct();
+  const inlineUpdate = useInlineProductUpdate();
+  const [savingCell, setSavingCell] = useState<string | null>(null);
+
   const qc = useQueryClient();
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search, 300);
@@ -530,8 +537,47 @@ const Products = () => {
                     </div>
                   </td>
                   <td className="px-4 py-3 font-body text-sm text-muted-foreground">{p.sku || '—'}</td>
-                  <td className="px-4 py-3 font-body text-sm text-foreground">{formatCurrency(p.retail_price)}</td>
-                  <td className="px-4 py-3 font-body text-sm text-foreground">{p.stock}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-1">
+                      <InlineEditCell
+                        value={Number(p.retail_price)}
+                        display={formatCurrency(p.retail_price)}
+                        type="currency"
+                        saving={savingCell === `${p.id}:retail_price`}
+                        onSave={v => {
+                          setSavingCell(`${p.id}:retail_price`);
+                          inlineUpdate.mutate(
+                            { id: p.id, name: p.name, field: 'retail_price', oldValue: Number(p.retail_price), newValue: v },
+                            {
+                              onSuccess: () => { setSavingCell(null); toast.success('Preço atualizado'); },
+                              onError: (e: any) => { setSavingCell(null); toast.error(e.message || 'Erro ao atualizar preço'); },
+                            },
+                          );
+                        }}
+                      />
+                      <ProductAuditPopover productId={p.id} />
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <InlineEditCell
+                      value={Number(p.stock)}
+                      display={String(p.stock)}
+                      type="integer"
+                      saving={savingCell === `${p.id}:stock`}
+                      onSave={v => {
+                        setSavingCell(`${p.id}:stock`);
+                        inlineUpdate.mutate(
+                          { id: p.id, name: p.name, field: 'stock', oldValue: Number(p.stock), newValue: v },
+                          {
+                            onSuccess: () => { setSavingCell(null); toast.success('Estoque atualizado'); },
+                            onError: (e: any) => { setSavingCell(null); toast.error(e.message || 'Erro ao atualizar estoque'); },
+                          },
+                        );
+                      }}
+
+                    />
+                  </td>
+
                   <td className="px-4 py-3 font-body text-sm text-muted-foreground">{p.variants_count} cores</td>
                   <td className="px-4 py-3">
                     <button
