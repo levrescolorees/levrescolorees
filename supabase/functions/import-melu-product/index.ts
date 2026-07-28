@@ -102,21 +102,18 @@ Deno.serve(async (req) => {
     const shortDescription = description.slice(0, 300);
     const weight = Number(firstLd?.weight?.value) || 0.061;
 
-    // 2. Unique per-shade image = first image of each page; shared images = present on all pages
-    const shadePrimary = new Map<string, string>();
-    const counts = new Map<string, number>();
-    for (const s of scraped) {
-      if (s.images[0]) shadePrimary.set(s.sku, s.images[0]);
-      for (const img of s.images) counts.set(img, (counts.get(img) || 0) + 1);
-    }
-    const sharedImages = Array.from(counts.entries())
-      .filter(([, c]) => c === scraped.length)
-      .map(([img]) => img);
+    // 2. Each shade page has its own gallery — all of those images belong to that shade
+    const shadeImages = new Map<string, string[]>();
+    for (const s of scraped) shadeImages.set(s.sku, s.images);
 
-    // 3. Upload product gallery: first shade packshot + shared campaign images
+    // 3. Product gallery = every shade's own images, in variant order (no cross-product images)
     const galleryUrls: string[] = [];
-    const firstShadeImg = shadePrimary.get(cfg.variants[0].sku);
-    const gallerySources = [...(firstShadeImg ? [firstShadeImg] : []), ...sharedImages.filter((i) => i !== firstShadeImg)];
+    const gallerySources: string[] = [];
+    for (const v of cfg.variants) {
+      for (const img of shadeImages.get(v.sku) || []) {
+        if (!gallerySources.includes(img)) gallerySources.push(img);
+      }
+    }
     for (let i = 0; i < gallerySources.length; i++) {
       const ext = gallerySources[i].split('.').pop()!.split('?')[0];
       galleryUrls.push(await uploadImage(supabase, gallerySources[i], `${cfg.storagePrefix}/base-${i}.${ext}`));
