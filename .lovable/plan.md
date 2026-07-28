@@ -1,45 +1,38 @@
-## O que vou cadastrar
+## Objetivo
 
-Dados confirmados direto do site da Melu (JSON-LD estruturado, sem bloqueio de bot):
+Cadastrar 3 produtos da linha **Glass (Ruby Rose)** no catálogo, cada um com todos os tons como variantes, imagens próprias no bucket e vínculo à coleção **Ruby Rose / Melu** — igual ao fluxo já usado nos imports anteriores.
 
-**1 produto:** Pó Solto Areia das Dunas — Melu Ruby Rose
-- Descrição oficial: "Transforme sua maquiagem com o pó solto Areia das Dunas... textura aveludada e natural, alta fixação, acabamento soft focus..."
-- Peso: 61 g (0,061 kg) — já vem do site, usado no cálculo do SuperFrete
-- Preço de venda: **R$ 8,90** | Custo: R$ 1,00 (placeholder, ajustável no admin)
-- Estoque: 100 por variante | Badge: "Novo" | Status: publicado
+## Produtos e tons confirmados no site
 
-**3 variantes (tons):**
+**1. Pó Compacto Glass — HB863 — venda R$ 6,99 — 12 tons**
+GPF10, GPF20, GPL10, GPL20, GPM10, GPM20, GPM30, GPT10, GPT20, GPD10, GPD20, GPD30
 
-| Tom | SKU | EAN |
-|---|---|---|
-| Horizonte Místico | RRM404-1 | 7897840306118 |
-| Encanto das Pedras | RRM404-3 | 7897840306132 |
-| Calor do Nordeste | RRM404-4 | 7897840306149 |
+**2. Pó Solto Glass — HB862 — venda R$ 6,99 — 4 tons**
+GPF01, GPL02, GPM03, GPT04
 
-Cada tom tem sua própria foto do potinho (imagem exclusiva), e há 4 imagens de campanha compartilhadas que vão para a galeria principal do produto.
+**3. Bronzer e Iluminador Marmorizado Glass — HBF1605 — 2 variantes**
+HBF16051 e HBF16052 — custo R$ 1,00, preço de venda provisório R$ 1,00 (você ajusta depois no admin)
 
-## Como vou fazer
+Peso vindo do JSON-LD do site (0,05 kg pó compacto/bronzer; 0,073 kg pó solto). Estoque 100 por variante. Badge "Novo".
 
-1. **Coleção nova "Ruby Rose / Melu"** via migração (não existe hoje no banco — só existem Blow, Boca Rosa, Bruna Tavares, Mais Vendidos, Mari Maria, Novidades). O produto será vinculado a ela.
-2. **Nova edge function `import-melu-product`** (mesmo padrão das `import-bt-product` / `import-epoca-product`):
-   - Faz fetch das 3 páginas de produto e lê o bloco JSON-LD (nome, descrição, peso, EAN) + extrai a galeria de imagens `_zoom`.
-   - Baixa as imagens e sobe para o bucket `product-images` em `melu-areia-das-dunas/…` (nada de hotlink no CDN de terceiro).
-   - Faz upsert do produto por SKU (`RRM404`) e das 3 variantes por SKU — rodar de novo não duplica.
-   - Vincula à coleção Ruby Rose / Melu.
-   - Registra em `supabase/config.toml` com `verify_jwt = false`, como as outras funções de importação.
-3. Disparo a função e confirmo o resultado no banco.
+## Como será feito
+
+Reaproveitar a edge function genérica `import-cdnlive-product`, que já sabe ler o tema do rubyrosemaquiagem.com.br (galeria `class="gallery"`, imagens `_zoom`) e o JSON-LD de descrição/peso.
+
+1. Adicionar 3 novas entradas no mapa `PRODUCTS`: `glass-po-compacto`, `glass-po-solto`, `glass-bronzer`, com nome, SKU pai, preço, prefixo de storage e a lista de tons (nome + SKU + URL).
+2. Fazer o custo (`costPrice`) configurável por produto (hoje é fixo 1) — para os três ficará R$ 1,00.
+3. Deploy da função e execução de um import por chave.
+4. Verificação por SQL: contagem de produtos, variantes, imagens por variante e vínculo na coleção.
 
 ## Detalhes técnicos
 
-- A imagem exclusiva de cada tom vai em `product_variants.images[0]`, então o seletor de cores (`ColorSwatchPicker`) já mostra as 3 bolinhas automaticamente na página do produto.
-- Galeria do produto (`products.images`): packshot do Horizonte Místico + as 4 imagens de campanha.
-- Não há mapeamento de família de pele aqui (não é base), então o picker mostra apenas os 3 tons sem os filtros Fair/Light/etc.
+- Cada página de tom é raspada individualmente; só as imagens da galeria daquela página entram na variante (evita fotos de produtos relacionados, problema já corrigido antes).
+- Galeria principal do produto = união das imagens dos tons, na ordem das variantes.
+- Upsert por SKU: se rodar de novo, atualiza em vez de duplicar.
+- Vínculo com a coleção `ruby-rose-melu` só é criado se ainda não existir.
+- Storage: `product-images/glass-po-compacto/…`, `glass-po-solto/…`, `glass-bronzer/…`.
 
-## O que não muda
+## Fora do escopo
 
-Nenhum produto existente, nenhum componente de front-end, nenhuma alteração de checkout/frete. Catálogo vai de 23 para 24 produtos.
-
-## Validação
-
-- Conferir no admin `/admin/produtos`: produto com thumbnail e 3 variantes com imagem.
-- Conferir na loja: página do produto com os 3 tons selecionáveis e a foto trocando ao clicar.
+- O link da Nova Era não será usado como fonte: o mesmo item (HBF16051) existe no site oficial da Ruby Rose com fotos e dados melhores, e é de lá que ele será importado.
+- Ajuste final de preço dos bronzers fica com você no admin.
