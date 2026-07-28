@@ -19,6 +19,10 @@ import {
 } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import BulkImageUpload from '@/components/admin/BulkImageUpload';
+import InlineEditCell from '@/components/admin/InlineEditCell';
+import ProductAuditPopover from '@/components/admin/ProductAuditPopover';
+import { useInlineProductUpdate } from '@/hooks/useInlineProductUpdate';
+
 
 /* ── CSV helpers ── */
 // ... keep existing code (detectSeparator, parseCSVLine, parsePrice, findCol, ParsedRow, parseRows, downloadTemplate — lines 24-165)
@@ -201,6 +205,9 @@ const Products = () => {
   const { data: collections } = useCollections();
   const deleteProduct = useDeleteProduct();
   const toggleProduct = useToggleProduct();
+  const inlineUpdate = useInlineProductUpdate();
+  const [savingCell, setSavingCell] = useState<string | null>(null);
+
   const qc = useQueryClient();
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search, 300);
