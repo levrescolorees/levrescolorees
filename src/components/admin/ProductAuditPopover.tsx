@@ -9,22 +9,7 @@ interface Props {
 }
 
 const ProductAuditPopover = ({ productId }: Props) => {
-  const { data, isLoading } = useQuery({
-    queryKey: ['admin', 'product-audit', productId],
-    enabled: false,
-    staleTime: 30_000,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('audit_logs')
-        .select('id, action, details, created_at')
-        .eq('entity_type', 'product')
-        .eq('entity_id', productId)
-        .order('created_at', { ascending: false })
-        .limit(10);
-      if (error) throw error;
-      return data || [];
-    },
-  });
+
 
   return (
     <Popover>
