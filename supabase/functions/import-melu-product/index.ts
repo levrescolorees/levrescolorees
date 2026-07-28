@@ -53,9 +53,18 @@ function extractLd(html: string): Record<string, any> | null {
   return null;
 }
 
+// Only images inside the product gallery carousel belong to this SKU.
+// Anything else on the page (related products, banners) must be ignored.
 function extractImages(html: string): string[] {
-  const found = html.match(/https:\/\/static\.cdnlive\.com\.br\/uploads\/790\/produto\/[\w-]+\.(?:png|jpg|jpeg|webp)/g) || [];
-  return Array.from(new Set(found));
+  const start = html.indexOf('product-gallery__carousel');
+  if (start === -1) return [];
+  const end = html.indexOf('</section>', start);
+  const segment = html.slice(start, end === -1 ? undefined : end);
+  const found = Array.from(segment.matchAll(/data-image="([^"]+)"/g)).map((m) => m[1]);
+  const normalized = found
+    .map((u) => (u.startsWith('//') ? `https:${u}` : u))
+    .filter((u) => !/_detalhe\./.test(u));
+  return Array.from(new Set(normalized));
 }
 
 async function uploadImage(supabase: any, url: string, path: string): Promise<string> {
