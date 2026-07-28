@@ -39,3 +39,7 @@ verify_jwt = false
 [functions.import-melu-product]
 verify_jwt = false
 
+[functions.import-cdnlive-product]
+verify_jwt = false
+
+
