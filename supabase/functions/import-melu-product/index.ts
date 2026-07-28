@@ -169,12 +169,14 @@ Deno.serve(async (req) => {
     let variantsCount = 0;
     for (let idx = 0; idx < scraped.length; idx++) {
       const s = scraped[idx];
-      const src = shadePrimary.get(s.sku);
+      const srcs = shadeImages.get(s.sku) || [];
       const variantImages: string[] = [];
-      if (src) {
+      for (let i = 0; i < srcs.length; i++) {
         try {
-          const ext = src.split('.').pop()!.split('?')[0];
-          variantImages.push(await uploadImage(supabase, src, `${cfg.storagePrefix}/tom-${slugify(s.shade)}.${ext}`));
+          const ext = srcs[i].split('.').pop()!.split('?')[0];
+          variantImages.push(
+            await uploadImage(supabase, srcs[i], `${cfg.storagePrefix}/tom-${slugify(s.shade)}-${i}.${ext}`),
+          );
         } catch (e) {
           console.error(`[import-melu] Image failed for ${s.shade}:`, e);
         }
