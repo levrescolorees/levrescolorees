@@ -673,6 +673,24 @@ Deno.serve(async req => {
 
     const trackingToken = await generateTrackingToken(order.id);
 
+    if (payload.payment_method === 'whatsapp') {
+      const response = {
+        order_id: order.id,
+        order_number: order.order_number,
+        payment_status: 'pending',
+        payment_method: 'whatsapp',
+        total,
+        items: validatedItems,
+        subtotal,
+        shipping: shippingCost,
+        discount: totalDiscount,
+        tracking_token: trackingToken,
+        message: 'Pedido registrado. Finalize o atendimento pelo WhatsApp.',
+      };
+      await finishIdempotency(supabaseAdmin, idempotencyKey, 'completed', response, order.id);
+      return jsonResponse(response, 200);
+    }
+
     if (!mpToken || !mpEnabled) {
       // Email is now handled by database trigger → email_outbox → email-worker
 
