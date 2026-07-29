@@ -29,6 +29,11 @@ const AdminSettings = () => {
   const [heroCtaText, setHeroCtaText] = useState('');
   const [heroCtaLink, setHeroCtaLink] = useState('');
 
+  // WhatsApp order settings
+  const [waEnabled, setWaEnabled] = useState(false);
+  const [waNumber, setWaNumber] = useState('');
+  const [waGreeting, setWaGreeting] = useState('');
+
   // Shipping form
   const [newRuleName, setNewRuleName] = useState('');
   const [newRuleType, setNewRuleType] = useState('fixed');
