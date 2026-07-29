@@ -78,6 +78,14 @@ const AdminSettings = () => {
 
   const saveBrand = () => saveSetting.mutate({ key: 'brand', value: { name: brandName, tagline: brandTagline } });
   const saveHero = () => saveSetting.mutate({ key: 'hero', value: { headline: heroHeadline, subheadline: heroSubheadline, cta_text: heroCtaText, cta_link: heroCtaLink } });
+  const saveWhatsApp = () => {
+    const digits = waNumber.replace(/\D/g, '');
+    if (waEnabled && digits.length < 10) {
+      toast.error('Informe um número de WhatsApp válido com DDD.');
+      return;
+    }
+    saveSetting.mutate({ key: 'whatsapp', value: { enabled: waEnabled, number: digits, greeting: waGreeting } });
+  };
 
   // Shipping mutations
   const addShippingRule = useMutation({
