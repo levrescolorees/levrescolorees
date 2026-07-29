@@ -1,24 +1,78 @@
 ## Objetivo
 
-Editar **preço** e **estoque** direto na lista `/admin/produtos`, sem abrir o produto, registrando quem alterou e quando.
+Permitir que o cliente monte o carrinho normalmente e finalize enviando o pedido completo por WhatsApp, para um número configurado no painel admin. O checkout com pagamento online continua funcionando (WhatsApp é opção adicional).
 
-## Como vai funcionar
+## O que será feito
 
-- As células de Preço e Estoque viram campos clicáveis. Clica → vira input → Enter (ou sair do campo) salva; Esc cancela.
-- Salvamento otimista com toast de confirmação e reversão se der erro.
-- Ao lado de cada valor alterado recentemente, um ícone de histórico mostra as últimas alterações (valor antigo → novo, usuário e data/hora).
+### 1. Configuração no admin
+Nova aba **WhatsApp** em Configurações com:
+- Número do WhatsApp (com DDI/DDD, ex: 5511999999999)
+- Liga/desliga o botão de pedido por WhatsApp
+- Texto de saudação opcional no início da mensagem
 
-## Log de alterações
+Salvo em `store_settings` na chave `whatsapp` (já é lida publicamente pela função `get_public_store_settings`, sem expor segredos).
 
-Cada edição grava um registro na tabela `audit_logs` (que já existe e já permite inserção pelo app), com:
-- ação: `product_price_updated` / `product_stock_updated`
-- produto (id e nome), valor anterior e novo
-- usuário logado (id + e-mail) e data/hora automática
+### 2. Botão no carrinho e no checkout
+- **Carrinho / gaveta do carrinho**: botão secundário "Pedir pelo WhatsApp" abaixo de "Finalizar Compra". Ele leva o cliente ao checkout já em modo WhatsApp (para preencher os dados).
+- **Checkout**: na etapa final, além de "Pagar agora", aparece "Enviar pedido pelo WhatsApp". Usa os mesmos dados já preenchidos (cliente, endereço, frete, cupom) — sem passar pelo Mercado Pago.
+- O botão só aparece se o número estiver configurado e a opção estiver ativa.
 
-Nada de novas tabelas nem migração.
+### 3. Mensagem formatada
+Ao clicar, abre o WhatsApp (`wa.me`) com a mensagem pronta, organizada assim:
+
+```text
+*NOVO PEDIDO - Lèvres Colorées*
+
+*CLIENTE*
+Nome: Maria Silva
+Telefone: (11) 98888-7777
+E-mail: maria@email.com
+CPF: 000.000.000-00
+(CNPJ / Empresa quando for revendedora)
+
+*ENTREGA*
+Rua Exemplo, 123 - Apto 12
+Bairro - Cidade/SP
+CEP: 01234-567
+Frete: PAC - R$ 19,90 (5 dias úteis)
+
+*ITENS*
+1) Base BT Skin
+   Cor: F10 Fair
+   Qtd: 3 x R$ 13,99 = *R$ 41,97*
+
+2) Pó Solto Glass
+   Cor: GPT04
+   Qtd: 1 x R$ 6,99 = *R$ 6,99*
+
+*RESUMO*
+Total de itens: 4
+Subtotal: R$ 48,96
+Desconto (CUPOM10): -R$ 4,90
+Frete: R$ 19,90
+*TOTAL: R$ 63,96*
+
+Observações: entregar após as 14h
+Pedido gerado pelo site em 29/07/2026 00:15
+```
+
+Regras de formatação:
+- Cada item numerado, com variação/cor, quantidade, valor unitário e subtotal (quantidade > 1 já vem somada).
+- Preço unitário respeita a precificação por quantidade (Box 06 / Box 12) já usada no carrinho.
+- Total de itens = soma das quantidades.
+- Campos vazios são omitidos (ex.: sem cupom, sem observação).
+
+### 4. Campo de observações
+Campo livre "Observações do pedido" no checkout, incluído na mensagem.
+
+### 5. Registro do pedido
+O pedido também é gravado no banco com `payment_method = 'whatsapp'` e status `pendente`, para aparecer no admin em Pedidos — assim você tem o histórico mesmo fechando pelo WhatsApp.
 
 ## Detalhes técnicos
 
-- `src/pages/admin/Products.tsx`: colunas Preço/Estoque passam a usar um novo componente `InlineEditCell` (`src/components/admin/InlineEditCell.tsx`) — input numérico, validação (preço ≥ 0 com 2 casas, estoque inteiro ≥ 0), estados de loading/erro.
-- Novo hook `src/hooks/useInlineProductUpdate.ts`: faz `update` em `products` (`retail_price` / `stock` + `updated_at`), depois insere o registro em `audit_logs`, e invalida a query `['admin','products']` (a lista usa o RPC `admin_products_list`, então o refetch mantém tudo consistente).
-- Novo componente `ProductAuditPopover` que consulta `audit_logs` filtrando por `entity_type = 'product'` e `entity_id`, ordenado por data, mostrando as 10 últimas alterações em PT-BR.
+- `src/lib/whatsappOrder.ts`: função pura que monta o texto a partir de itens + dados do checkout, com `encodeURIComponent` e quebras de linha `%0A`. Testável isoladamente.
+- `useStoreSettings`: novo tipo `WhatsAppSettings { number, enabled, greeting }`.
+- `AdminSettings.tsx`: nova aba usando o mutation `saveSetting` existente (chave `whatsapp`), com máscara/validação do número (só dígitos, 12-13 caracteres).
+- `Checkout.tsx`: novo handler `handleWhatsAppOrder` que reaproveita a criação de pedido já existente (`useCreateOrder`) e, no sucesso, abre `https://wa.me/<numero>?text=<mensagem>` em nova aba e limpa o carrinho.
+- `CartDrawer.tsx` e `Cart.tsx`: botão secundário navegando para `/checkout?modo=whatsapp`.
+- Sem migração de banco: `store_settings` e `orders.payment_method` (texto) já suportam.
