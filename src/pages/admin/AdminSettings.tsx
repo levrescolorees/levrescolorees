@@ -57,6 +57,10 @@ const AdminSettings = () => {
       setHeroSubheadline(hero.subheadline || '');
       setHeroCtaText(hero.cta_text || '');
       setHeroCtaLink(hero.cta_link || '');
+      const wa = (settings.whatsapp || {}) as any;
+      setWaEnabled(!!wa.enabled);
+      setWaNumber(wa.number || '');
+      setWaGreeting(wa.greeting || '');
     }
   }, [settings]);
 
