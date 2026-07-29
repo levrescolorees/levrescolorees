@@ -1111,11 +1111,38 @@ const Checkout = () => {
 
               {/* CTA only on step 4 */}
               {step === 4 && (
-                <button onClick={handleSubmit} disabled={submitting}
-                  className="w-full bg-gradient-rose text-primary-foreground font-body font-semibold text-sm tracking-wider uppercase px-6 py-4 rounded-sm hover:opacity-90 transition-opacity shadow-rose disabled:opacity-50 flex items-center justify-center gap-2">
-                  {submitting ? <><Loader2 className="w-4 h-4 animate-spin" /> Processando...</> : 'Finalizar Compra'}
-                </button>
+                <div className="space-y-3">
+                  <button onClick={handleSubmit} disabled={submitting}
+                    className="w-full bg-gradient-rose text-primary-foreground font-body font-semibold text-sm tracking-wider uppercase px-6 py-4 rounded-sm hover:opacity-90 transition-opacity shadow-rose disabled:opacity-50 flex items-center justify-center gap-2">
+                    {submitting ? <><Loader2 className="w-4 h-4 animate-spin" /> Processando...</> : 'Finalizar Compra'}
+                  </button>
+
+                  {waEnabled && (
+                    <>
+                      <div className="flex items-center gap-3">
+                        <span className="h-px flex-1 bg-border" />
+                        <span className="font-body text-xs text-muted-foreground uppercase tracking-wider">ou</span>
+                        <span className="h-px flex-1 bg-border" />
+                      </div>
+                      <Textarea
+                        value={waNotes}
+                        onChange={e => setWaNotes(e.target.value)}
+                        rows={2}
+                        placeholder="Observações para o pedido (opcional)"
+                        className="font-body text-sm"
+                      />
+                      <button onClick={handleWhatsAppSubmit} disabled={submitting}
+                        className="w-full bg-[hsl(142,70%,40%)] text-white font-body font-semibold text-sm tracking-wider uppercase px-6 py-4 rounded-sm hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center justify-center gap-2">
+                        {submitting ? <><Loader2 className="w-4 h-4 animate-spin" /> Enviando...</> : <><MessageCircle className="w-4 h-4" /> Enviar pedido pelo WhatsApp</>}
+                      </button>
+                      <p className="font-body text-xs text-muted-foreground text-center">
+                        Seu pedido será enviado completo no nosso WhatsApp para finalizarmos o atendimento.
+                      </p>
+                    </>
+                  )}
+                </div>
               )}
+
 
               {/* Trust badges */}
               <div className="flex items-center justify-center gap-4 text-xs font-body text-muted-foreground flex-wrap">
