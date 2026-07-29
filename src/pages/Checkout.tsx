@@ -1156,13 +1156,20 @@ const Checkout = () => {
 
         {/* Mobile fixed CTA */}
         {step === 4 && (
-          <div className="fixed bottom-0 left-0 right-0 bg-card border-t border-border p-4 lg:hidden z-50">
+          <div className="fixed bottom-0 left-0 right-0 bg-card border-t border-border p-4 lg:hidden z-50 space-y-2">
             <button onClick={handleSubmit} disabled={submitting}
               className="w-full bg-gradient-rose text-primary-foreground font-body font-semibold text-sm tracking-wider uppercase px-6 py-4 rounded-sm shadow-rose disabled:opacity-50 flex items-center justify-center gap-2">
               {submitting ? <><Loader2 className="w-4 h-4 animate-spin" /> Processando...</> : `Finalizar — ${formatCurrency(finalTotal)}`}
             </button>
+            {waEnabled && (
+              <button onClick={handleWhatsAppSubmit} disabled={submitting}
+                className="w-full bg-[hsl(142,70%,40%)] text-white font-body font-semibold text-sm tracking-wider uppercase px-6 py-3 rounded-sm disabled:opacity-50 flex items-center justify-center gap-2">
+                <MessageCircle className="w-4 h-4" /> Pedir pelo WhatsApp
+              </button>
+            )}
           </div>
         )}
+
       </main>
       <Footer />
     </div>
