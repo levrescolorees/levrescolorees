@@ -32,7 +32,7 @@ type PaymentPayload = {
     city: string;
     state: string;
   };
-  payment_method: 'pix' | 'card' | 'boleto';
+  payment_method: 'pix' | 'card' | 'boleto' | 'whatsapp';
   shipping_cost?: number;
   shipping_method?: string | null;
   coupon_code?: string | null;
