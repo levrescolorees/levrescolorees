@@ -131,6 +131,12 @@ const Checkout = () => {
   const mpBoletoEnabled = mpConfig?.boleto_enabled ?? true;
   const mpMaxInstallments = mpConfig?.max_installments || 12;
 
+  // WhatsApp order config
+  const waConfig = (storeSettings?.whatsapp || {}) as { enabled?: boolean; number?: string; greeting?: string };
+  const waEnabled = !!waConfig.enabled && !!(waConfig.number || '').replace(/\D/g, '');
+  const [waNotes, setWaNotes] = useState('');
+  const [waUrl, setWaUrl] = useState<string | null>(null);
+
   const [step, setStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
