@@ -682,7 +682,7 @@ Deno.serve(async req => {
         total,
         items: validatedItems,
         subtotal,
-        shipping: shippingCost,
+        shipping,
         discount: totalDiscount,
         tracking_token: trackingToken,
         message: 'Pedido registrado. Finalize o atendimento pelo WhatsApp.',
