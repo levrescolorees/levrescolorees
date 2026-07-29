@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Save, Truck, Palette, Type, Plus, Trash2, Paintbrush, ExternalLink, Users, Shield, ShieldCheck } from 'lucide-react';
+import { Save, Truck, Palette, Type, Plus, Trash2, Paintbrush, ExternalLink, Users, Shield, ShieldCheck, MessageCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -29,6 +29,11 @@ const AdminSettings = () => {
   const [heroCtaText, setHeroCtaText] = useState('');
   const [heroCtaLink, setHeroCtaLink] = useState('');
 
+  // WhatsApp order settings
+  const [waEnabled, setWaEnabled] = useState(false);
+  const [waNumber, setWaNumber] = useState('');
+  const [waGreeting, setWaGreeting] = useState('');
+
   // Shipping form
   const [newRuleName, setNewRuleName] = useState('');
   const [newRuleType, setNewRuleType] = useState('fixed');
@@ -52,6 +57,10 @@ const AdminSettings = () => {
       setHeroSubheadline(hero.subheadline || '');
       setHeroCtaText(hero.cta_text || '');
       setHeroCtaLink(hero.cta_link || '');
+      const wa = (settings.whatsapp || {}) as any;
+      setWaEnabled(!!wa.enabled);
+      setWaNumber(wa.number || '');
+      setWaGreeting(wa.greeting || '');
     }
   }, [settings]);
 
@@ -69,6 +78,14 @@ const AdminSettings = () => {
 
   const saveBrand = () => saveSetting.mutate({ key: 'brand', value: { name: brandName, tagline: brandTagline } });
   const saveHero = () => saveSetting.mutate({ key: 'hero', value: { headline: heroHeadline, subheadline: heroSubheadline, cta_text: heroCtaText, cta_link: heroCtaLink } });
+  const saveWhatsApp = () => {
+    const digits = waNumber.replace(/\D/g, '');
+    if (waEnabled && digits.length < 10) {
+      toast.error('Informe um número de WhatsApp válido com DDD.');
+      return;
+    }
+    saveSetting.mutate({ key: 'whatsapp', value: { enabled: waEnabled, number: digits, greeting: waGreeting } });
+  };
 
   // Shipping mutations
   const addShippingRule = useMutation({
@@ -117,8 +134,36 @@ const AdminSettings = () => {
           <TabsTrigger value="brand" className="font-body"><Palette className="w-4 h-4 mr-1.5" /> Marca</TabsTrigger>
           <TabsTrigger value="hero" className="font-body"><Type className="w-4 h-4 mr-1.5" /> Hero / Home</TabsTrigger>
           <TabsTrigger value="shipping" className="font-body"><Truck className="w-4 h-4 mr-1.5" /> Frete</TabsTrigger>
+          <TabsTrigger value="whatsapp" className="font-body"><MessageCircle className="w-4 h-4 mr-1.5" /> WhatsApp</TabsTrigger>
           <TabsTrigger value="users" className="font-body"><Users className="w-4 h-4 mr-1.5" /> Usuários</TabsTrigger>
         </TabsList>
+
+        {/* ─── WhatsApp ──────────────────────────── */}
+        <TabsContent value="whatsapp">
+          <div className="bg-card rounded-lg shadow-soft p-6 space-y-4 max-w-xl">
+            <h2 className="font-display text-lg font-semibold text-foreground">Pedido via WhatsApp</h2>
+            <p className="font-body text-sm text-muted-foreground">
+              Quando ativado, o cliente pode finalizar o pedido enviando tudo pronto no seu WhatsApp. O pedido também fica registrado no painel.
+            </p>
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input type="checkbox" checked={waEnabled} onChange={e => setWaEnabled(e.target.checked)} className="w-4 h-4 accent-primary" />
+              <span className="font-body text-sm text-foreground">Ativar botão "Enviar pedido pelo WhatsApp"</span>
+            </label>
+            <div>
+              <label className="font-body text-sm font-medium text-foreground">Número do WhatsApp (com DDD)</label>
+              <Input value={waNumber} onChange={e => setWaNumber(e.target.value)} className="font-body mt-1" placeholder="11912345678" />
+              <p className="font-body text-xs text-muted-foreground mt-1">Somente números. O código do Brasil (55) é adicionado automaticamente.</p>
+            </div>
+            <div>
+              <label className="font-body text-sm font-medium text-foreground">Saudação inicial (opcional)</label>
+              <Textarea value={waGreeting} onChange={e => setWaGreeting(e.target.value)} className="font-body mt-1" rows={2} placeholder="Olá! Quero finalizar meu pedido:" />
+            </div>
+            <Button onClick={saveWhatsApp} disabled={saveSetting.isPending}>
+              <Save className="w-4 h-4 mr-2" /> Salvar
+            </Button>
+          </div>
+        </TabsContent>
+
 
         {/* ─── Theme ─────────────────────────────── */}
         <TabsContent value="theme">

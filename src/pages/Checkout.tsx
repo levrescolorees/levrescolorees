@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft, ArrowRight, ShieldCheck, CreditCard, QrCode, FileText,
-  Check, Tag, User, MapPin, Truck, Wallet, Copy, Loader2, Package,
+  Check, Tag, User, MapPin, Truck, Wallet, Copy, Loader2, Package, MessageCircle,
 } from 'lucide-react';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
@@ -11,9 +11,11 @@ import { isValidCPF, isValidCNPJ } from '@/lib/validators';
 import { useCart } from '@/context/CartContext';
 import { getSmartPrice, formatCurrency } from '@/data/products';
 import { useShippingRules, useStoreSettings } from '@/hooks/useStoreSettings';
+import { buildWhatsAppOrderMessage, buildWhatsAppUrl } from '@/lib/whatsappOrder';
 import { supabase } from '@/integrations/supabase/client';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
 import { Progress } from '@/components/ui/progress';
 import { toast } from 'sonner';
 
@@ -67,7 +69,7 @@ interface PaymentResult {
   order_id: string;
   order_number: number;
   payment_status: string;
-  payment_method: PaymentMethod;
+  payment_method: PaymentMethod | 'whatsapp';
   total: number;
   tracking_token?: string | null;
   message?: string;
@@ -128,6 +130,12 @@ const Checkout = () => {
   const mpPixEnabled = mpConfig?.pix_enabled ?? true;
   const mpBoletoEnabled = mpConfig?.boleto_enabled ?? true;
   const mpMaxInstallments = mpConfig?.max_installments || 12;
+
+  // WhatsApp order config
+  const waConfig = (storeSettings?.whatsapp || {}) as { enabled?: boolean; number?: string; greeting?: string };
+  const waEnabled = !!waConfig.enabled && !!(waConfig.number || '').replace(/\D/g, '');
+  const [waNotes, setWaNotes] = useState('');
+  const [waUrl, setWaUrl] = useState<string | null>(null);
 
   const [step, setStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
@@ -496,6 +504,114 @@ const Checkout = () => {
     }
   };
 
+  // Submit order via WhatsApp (registers the order, then opens WhatsApp with the full message)
+  const handleWhatsAppSubmit = async () => {
+    if (submitting) return;
+    // Open the tab synchronously to avoid popup blockers
+    const popup = window.open('', '_blank');
+    setSubmitting(true);
+
+    try {
+      const idempotencyKey = (globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`).replace(/\./g, '');
+
+      const payload = {
+        items: items.map(item => ({
+          product_id: item.product.id,
+          variant_id: null,
+          variant_name: item.selectedColor || null,
+          quantity: item.quantity,
+        })),
+        customer: {
+          name: form.name.trim().slice(0, 120),
+          email: form.email.trim().toLowerCase().slice(0, 254),
+          phone: form.phone.replace(/\D/g, '').slice(0, 11),
+          cpf: form.cpf.replace(/\D/g, '').slice(0, 11),
+          cnpj: form.isWholesale ? form.cnpj.replace(/\D/g, '').slice(0, 14) : null,
+          company_name: form.isWholesale ? form.companyName.trim().slice(0, 120) : null,
+          is_reseller: form.isWholesale,
+        },
+        shipping_address: {
+          zip: form.zip.replace(/\D/g, '').slice(0, 8),
+          street: form.street.trim().slice(0, 200),
+          number: form.number.trim().slice(0, 20),
+          complement: form.complement.trim().slice(0, 100),
+          neighborhood: form.neighborhood.trim().slice(0, 100),
+          city: form.city.trim().slice(0, 100),
+          state: form.state.toUpperCase().trim().slice(0, 2),
+        },
+        payment_method: 'whatsapp' as const,
+        shipping_cost: shipping,
+        shipping_method: selectedShipping && shippingOptions.length
+          ? (shippingOptions.find(o => o.id === selectedShipping)?.name || null)
+          : null,
+        coupon_code: appliedCoupon?.code || null,
+      };
+
+      const { data, error } = await supabase.functions.invoke('create-payment', {
+        body: payload,
+        headers: { 'x-idempotency-key': idempotencyKey },
+      });
+
+      if (error) throw error;
+      if (data?.error) { popup?.close(); toast.error(data.error); return; }
+
+      const selectedOption = shippingOptions.find(o => o.id === selectedShipping) || null;
+      const message = buildWhatsAppOrderMessage({
+        storeName: (storeSettings?.brand as { name?: string } | undefined)?.name || 'Lèvres Colorées',
+        greeting: waConfig.greeting || '',
+        orderNumber: data?.order_number ?? null,
+        customer: {
+          name: form.name.trim(),
+          phone: form.phone,
+          email: form.email.trim(),
+          cpf: form.cpf,
+          cnpj: form.isWholesale ? form.cnpj : null,
+          companyName: form.isWholesale ? form.companyName : null,
+          isWholesale: form.isWholesale,
+        },
+        address: {
+          zip: form.zip,
+          street: form.street,
+          number: form.number,
+          complement: form.complement,
+          neighborhood: form.neighborhood,
+          city: form.city,
+          state: form.state,
+        },
+        shippingMethod: selectedOption?.name || null,
+        shippingDeliveryDays: selectedOption?.delivery_time || null,
+        items: items.map(item => ({
+          name: item.product.name,
+          variant: item.selectedColor || null,
+          quantity: item.quantity,
+          unitPrice: getSmartPrice(item.product.retailPrice, item.product.box06Price, item.product.box12Price, item.quantity).price,
+        })),
+        subtotal: typeof data?.subtotal === 'number' ? data.subtotal : totalSmart,
+        couponCode: appliedCoupon?.code || null,
+        couponDiscount: couponDiscount,
+        shipping: typeof data?.shipping === 'number' ? data.shipping : shipping,
+        total: typeof data?.total === 'number' ? data.total : afterCoupon,
+        notes: waNotes,
+      });
+
+      const url = buildWhatsAppUrl(waConfig.number || '', message);
+      setWaUrl(url);
+      if (popup) popup.location.href = url;
+      else window.open(url, '_blank');
+
+      setTrackingToken(data?.tracking_token || null);
+      setPaymentResult(data);
+      clearCart();
+      setSubmitted(true);
+    } catch (error) {
+      popup?.close();
+      const message = error instanceof Error ? error.message : 'Erro ao registrar pedido.';
+      toast.error(message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   // ===== SUCCESS SCREEN =====
   if (submitted && paymentResult) {
     return (
@@ -504,19 +620,33 @@ const Checkout = () => {
         <main className="container mx-auto px-4 py-12 md:py-20 max-w-2xl">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6 text-center">
             <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-primary/10 mb-2">
-              {paymentResult.payment_status === 'approved'
-                ? <Check className="w-10 h-10 text-primary" />
-                : <Loader2 className="w-10 h-10 text-primary animate-spin" />}
+              {paymentResult.payment_method === 'whatsapp'
+                ? <MessageCircle className="w-10 h-10 text-primary" />
+                : paymentResult.payment_status === 'approved'
+                  ? <Check className="w-10 h-10 text-primary" />
+                  : <Loader2 className="w-10 h-10 text-primary animate-spin" />}
             </div>
             <h1 className="font-display text-3xl font-bold text-foreground">
-              {paymentResult.payment_status === 'approved' ? 'Pedido Confirmado!' : 'Aguardando Pagamento'}
+              {paymentResult.payment_method === 'whatsapp'
+                ? 'Pedido enviado pelo WhatsApp!'
+                : paymentResult.payment_status === 'approved' ? 'Pedido Confirmado!' : 'Aguardando Pagamento'}
             </h1>
             <p className="font-body text-muted-foreground">
               Pedido #{paymentResult.order_number}
-              {paymentResult.payment_status === 'approved'
-                ? ' — Pagamento aprovado! Você receberá os detalhes por e-mail.'
-                : ' — Complete o pagamento abaixo.'}
+              {paymentResult.payment_method === 'whatsapp'
+                ? ' — Finalize a conversa no WhatsApp para confirmar seu pedido.'
+                : paymentResult.payment_status === 'approved'
+                  ? ' — Pagamento aprovado! Você receberá os detalhes por e-mail.'
+                  : ' — Complete o pagamento abaixo.'}
             </p>
+
+            {paymentResult.payment_method === 'whatsapp' && waUrl && (
+              <a href={waUrl} target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center justify-center gap-2 w-full bg-[hsl(142,70%,40%)] text-white font-body font-semibold text-sm tracking-wider uppercase px-6 py-4 rounded-sm hover:opacity-90 transition-opacity">
+                <MessageCircle className="w-4 h-4" /> Abrir conversa no WhatsApp
+              </a>
+            )}
+
 
             {/* PIX payment info */}
             {form.payment === 'pix' && paymentResult.pix && (
@@ -981,11 +1111,38 @@ const Checkout = () => {
 
               {/* CTA only on step 4 */}
               {step === 4 && (
-                <button onClick={handleSubmit} disabled={submitting}
-                  className="w-full bg-gradient-rose text-primary-foreground font-body font-semibold text-sm tracking-wider uppercase px-6 py-4 rounded-sm hover:opacity-90 transition-opacity shadow-rose disabled:opacity-50 flex items-center justify-center gap-2">
-                  {submitting ? <><Loader2 className="w-4 h-4 animate-spin" /> Processando...</> : 'Finalizar Compra'}
-                </button>
+                <div className="space-y-3">
+                  <button onClick={handleSubmit} disabled={submitting}
+                    className="w-full bg-gradient-rose text-primary-foreground font-body font-semibold text-sm tracking-wider uppercase px-6 py-4 rounded-sm hover:opacity-90 transition-opacity shadow-rose disabled:opacity-50 flex items-center justify-center gap-2">
+                    {submitting ? <><Loader2 className="w-4 h-4 animate-spin" /> Processando...</> : 'Finalizar Compra'}
+                  </button>
+
+                  {waEnabled && (
+                    <>
+                      <div className="flex items-center gap-3">
+                        <span className="h-px flex-1 bg-border" />
+                        <span className="font-body text-xs text-muted-foreground uppercase tracking-wider">ou</span>
+                        <span className="h-px flex-1 bg-border" />
+                      </div>
+                      <Textarea
+                        value={waNotes}
+                        onChange={e => setWaNotes(e.target.value)}
+                        rows={2}
+                        placeholder="Observações para o pedido (opcional)"
+                        className="font-body text-sm"
+                      />
+                      <button onClick={handleWhatsAppSubmit} disabled={submitting}
+                        className="w-full bg-[hsl(142,70%,40%)] text-white font-body font-semibold text-sm tracking-wider uppercase px-6 py-4 rounded-sm hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center justify-center gap-2">
+                        {submitting ? <><Loader2 className="w-4 h-4 animate-spin" /> Enviando...</> : <><MessageCircle className="w-4 h-4" /> Enviar pedido pelo WhatsApp</>}
+                      </button>
+                      <p className="font-body text-xs text-muted-foreground text-center">
+                        Seu pedido será enviado completo no nosso WhatsApp para finalizarmos o atendimento.
+                      </p>
+                    </>
+                  )}
+                </div>
               )}
+
 
               {/* Trust badges */}
               <div className="flex items-center justify-center gap-4 text-xs font-body text-muted-foreground flex-wrap">
@@ -999,13 +1156,20 @@ const Checkout = () => {
 
         {/* Mobile fixed CTA */}
         {step === 4 && (
-          <div className="fixed bottom-0 left-0 right-0 bg-card border-t border-border p-4 lg:hidden z-50">
+          <div className="fixed bottom-0 left-0 right-0 bg-card border-t border-border p-4 lg:hidden z-50 space-y-2">
             <button onClick={handleSubmit} disabled={submitting}
               className="w-full bg-gradient-rose text-primary-foreground font-body font-semibold text-sm tracking-wider uppercase px-6 py-4 rounded-sm shadow-rose disabled:opacity-50 flex items-center justify-center gap-2">
               {submitting ? <><Loader2 className="w-4 h-4 animate-spin" /> Processando...</> : `Finalizar — ${formatCurrency(finalTotal)}`}
             </button>
+            {waEnabled && (
+              <button onClick={handleWhatsAppSubmit} disabled={submitting}
+                className="w-full bg-[hsl(142,70%,40%)] text-white font-body font-semibold text-sm tracking-wider uppercase px-6 py-3 rounded-sm disabled:opacity-50 flex items-center justify-center gap-2">
+                <MessageCircle className="w-4 h-4" /> Pedir pelo WhatsApp
+              </button>
+            )}
           </div>
         )}
+
       </main>
       <Footer />
     </div>

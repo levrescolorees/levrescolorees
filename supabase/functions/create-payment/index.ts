@@ -32,7 +32,7 @@ type PaymentPayload = {
     city: string;
     state: string;
   };
-  payment_method: 'pix' | 'card' | 'boleto';
+  payment_method: 'pix' | 'card' | 'boleto' | 'whatsapp';
   shipping_cost?: number;
   shipping_method?: string | null;
   coupon_code?: string | null;
@@ -357,7 +357,7 @@ Deno.serve(async req => {
       return jsonResponse({ error: 'Endereco invalido' }, 400);
     }
 
-    if (!['pix', 'card', 'boleto'].includes(payload.payment_method)) {
+    if (!['pix', 'card', 'boleto', 'whatsapp'].includes(payload.payment_method)) {
       return jsonResponse({ error: 'Metodo de pagamento invalido' }, 400);
     }
 
@@ -672,6 +672,24 @@ Deno.serve(async req => {
     }
 
     const trackingToken = await generateTrackingToken(order.id);
+
+    if (payload.payment_method === 'whatsapp') {
+      const response = {
+        order_id: order.id,
+        order_number: order.order_number,
+        payment_status: 'pending',
+        payment_method: 'whatsapp',
+        total,
+        items: validatedItems,
+        subtotal,
+        shipping,
+        discount: totalDiscount,
+        tracking_token: trackingToken,
+        message: 'Pedido registrado. Finalize o atendimento pelo WhatsApp.',
+      };
+      await finishIdempotency(supabaseAdmin, idempotencyKey, 'completed', response, order.id);
+      return jsonResponse(response, 200);
+    }
 
     if (!mpToken || !mpEnabled) {
       // Email is now handled by database trigger → email_outbox → email-worker

@@ -25,10 +25,17 @@ export interface PublicMercadoPagoSettings {
   environment?: 'sandbox' | 'production';
 }
 
+export interface WhatsAppSettings {
+  number?: string;
+  enabled?: boolean;
+  greeting?: string;
+}
+
 export type PublicStoreSettings = {
   brand?: BrandSettings;
   hero?: HeroSettings;
   mercado_pago?: PublicMercadoPagoSettings;
+  whatsapp?: WhatsAppSettings;
   [key: string]: unknown;
 };
 
