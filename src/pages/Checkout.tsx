@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft, ArrowRight, ShieldCheck, CreditCard, QrCode, FileText,
-  Check, Tag, User, MapPin, Truck, Wallet, Copy, Loader2, Package,
+  Check, Tag, User, MapPin, Truck, Wallet, Copy, Loader2, Package, MessageCircle,
 } from 'lucide-react';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
@@ -11,9 +11,11 @@ import { isValidCPF, isValidCNPJ } from '@/lib/validators';
 import { useCart } from '@/context/CartContext';
 import { getSmartPrice, formatCurrency } from '@/data/products';
 import { useShippingRules, useStoreSettings } from '@/hooks/useStoreSettings';
+import { buildWhatsAppOrderMessage, buildWhatsAppUrl } from '@/lib/whatsappOrder';
 import { supabase } from '@/integrations/supabase/client';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
 import { Progress } from '@/components/ui/progress';
 import { toast } from 'sonner';
 
