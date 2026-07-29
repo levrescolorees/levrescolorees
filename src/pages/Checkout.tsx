@@ -69,7 +69,7 @@ interface PaymentResult {
   order_id: string;
   order_number: number;
   payment_status: string;
-  payment_method: PaymentMethod;
+  payment_method: PaymentMethod | 'whatsapp';
   total: number;
   tracking_token?: string | null;
   message?: string;
