@@ -620,19 +620,33 @@ const Checkout = () => {
         <main className="container mx-auto px-4 py-12 md:py-20 max-w-2xl">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6 text-center">
             <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-primary/10 mb-2">
-              {paymentResult.payment_status === 'approved'
-                ? <Check className="w-10 h-10 text-primary" />
-                : <Loader2 className="w-10 h-10 text-primary animate-spin" />}
+              {paymentResult.payment_method === 'whatsapp'
+                ? <MessageCircle className="w-10 h-10 text-primary" />
+                : paymentResult.payment_status === 'approved'
+                  ? <Check className="w-10 h-10 text-primary" />
+                  : <Loader2 className="w-10 h-10 text-primary animate-spin" />}
             </div>
             <h1 className="font-display text-3xl font-bold text-foreground">
-              {paymentResult.payment_status === 'approved' ? 'Pedido Confirmado!' : 'Aguardando Pagamento'}
+              {paymentResult.payment_method === 'whatsapp'
+                ? 'Pedido enviado pelo WhatsApp!'
+                : paymentResult.payment_status === 'approved' ? 'Pedido Confirmado!' : 'Aguardando Pagamento'}
             </h1>
             <p className="font-body text-muted-foreground">
               Pedido #{paymentResult.order_number}
-              {paymentResult.payment_status === 'approved'
-                ? ' — Pagamento aprovado! Você receberá os detalhes por e-mail.'
-                : ' — Complete o pagamento abaixo.'}
+              {paymentResult.payment_method === 'whatsapp'
+                ? ' — Finalize a conversa no WhatsApp para confirmar seu pedido.'
+                : paymentResult.payment_status === 'approved'
+                  ? ' — Pagamento aprovado! Você receberá os detalhes por e-mail.'
+                  : ' — Complete o pagamento abaixo.'}
             </p>
+
+            {paymentResult.payment_method === 'whatsapp' && waUrl && (
+              <a href={waUrl} target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center justify-center gap-2 w-full bg-[hsl(142,70%,40%)] text-white font-body font-semibold text-sm tracking-wider uppercase px-6 py-4 rounded-sm hover:opacity-90 transition-opacity">
+                <MessageCircle className="w-4 h-4" /> Abrir conversa no WhatsApp
+              </a>
+            )}
+
 
             {/* PIX payment info */}
             {form.payment === 'pix' && paymentResult.pix && (
