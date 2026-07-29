@@ -504,6 +504,114 @@ const Checkout = () => {
     }
   };
 
+  // Submit order via WhatsApp (registers the order, then opens WhatsApp with the full message)
+  const handleWhatsAppSubmit = async () => {
+    if (submitting) return;
+    // Open the tab synchronously to avoid popup blockers
+    const popup = window.open('', '_blank');
+    setSubmitting(true);
+
+    try {
+      const idempotencyKey = (globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`).replace(/\./g, '');
+
+      const payload = {
+        items: items.map(item => ({
+          product_id: item.product.id,
+          variant_id: null,
+          variant_name: item.selectedColor || null,
+          quantity: item.quantity,
+        })),
+        customer: {
+          name: form.name.trim().slice(0, 120),
+          email: form.email.trim().toLowerCase().slice(0, 254),
+          phone: form.phone.replace(/\D/g, '').slice(0, 11),
+          cpf: form.cpf.replace(/\D/g, '').slice(0, 11),
+          cnpj: form.isWholesale ? form.cnpj.replace(/\D/g, '').slice(0, 14) : null,
+          company_name: form.isWholesale ? form.companyName.trim().slice(0, 120) : null,
+          is_reseller: form.isWholesale,
+        },
+        shipping_address: {
+          zip: form.zip.replace(/\D/g, '').slice(0, 8),
+          street: form.street.trim().slice(0, 200),
+          number: form.number.trim().slice(0, 20),
+          complement: form.complement.trim().slice(0, 100),
+          neighborhood: form.neighborhood.trim().slice(0, 100),
+          city: form.city.trim().slice(0, 100),
+          state: form.state.toUpperCase().trim().slice(0, 2),
+        },
+        payment_method: 'whatsapp' as const,
+        shipping_cost: shipping,
+        shipping_method: selectedShipping && shippingOptions.length
+          ? (shippingOptions.find(o => o.id === selectedShipping)?.name || null)
+          : null,
+        coupon_code: appliedCoupon?.code || null,
+      };
+
+      const { data, error } = await supabase.functions.invoke('create-payment', {
+        body: payload,
+        headers: { 'x-idempotency-key': idempotencyKey },
+      });
+
+      if (error) throw error;
+      if (data?.error) { popup?.close(); toast.error(data.error); return; }
+
+      const selectedOption = shippingOptions.find(o => o.id === selectedShipping) || null;
+      const message = buildWhatsAppOrderMessage({
+        storeName: (storeSettings?.brand as { name?: string } | undefined)?.name || 'Lèvres Colorées',
+        greeting: waConfig.greeting || '',
+        orderNumber: data?.order_number ?? null,
+        customer: {
+          name: form.name.trim(),
+          phone: form.phone,
+          email: form.email.trim(),
+          cpf: form.cpf,
+          cnpj: form.isWholesale ? form.cnpj : null,
+          companyName: form.isWholesale ? form.companyName : null,
+          isWholesale: form.isWholesale,
+        },
+        address: {
+          zip: form.zip,
+          street: form.street,
+          number: form.number,
+          complement: form.complement,
+          neighborhood: form.neighborhood,
+          city: form.city,
+          state: form.state,
+        },
+        shippingMethod: selectedOption?.name || null,
+        shippingDeliveryDays: selectedOption?.delivery_time || null,
+        items: items.map(item => ({
+          name: item.product.name,
+          variant: item.selectedColor || null,
+          quantity: item.quantity,
+          unitPrice: getSmartPrice(item.product.retailPrice, item.product.box06Price, item.product.box12Price, item.quantity).price,
+        })),
+        subtotal: typeof data?.subtotal === 'number' ? data.subtotal : totalSmart,
+        couponCode: appliedCoupon?.code || null,
+        couponDiscount: couponDiscount,
+        shipping: typeof data?.shipping === 'number' ? data.shipping : shipping,
+        total: typeof data?.total === 'number' ? data.total : afterCoupon,
+        notes: waNotes,
+      });
+
+      const url = buildWhatsAppUrl(waConfig.number || '', message);
+      setWaUrl(url);
+      if (popup) popup.location.href = url;
+      else window.open(url, '_blank');
+
+      setTrackingToken(data?.tracking_token || null);
+      setPaymentResult(data);
+      clearCart();
+      setSubmitted(true);
+    } catch (error) {
+      popup?.close();
+      const message = error instanceof Error ? error.message : 'Erro ao registrar pedido.';
+      toast.error(message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   // ===== SUCCESS SCREEN =====
   if (submitted && paymentResult) {
     return (
