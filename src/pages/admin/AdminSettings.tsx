@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Save, Truck, Palette, Type, Plus, Trash2, Paintbrush, ExternalLink, Users, Shield, ShieldCheck } from 'lucide-react';
+import { Save, Truck, Palette, Type, Plus, Trash2, Paintbrush, ExternalLink, Users, Shield, ShieldCheck, MessageCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
