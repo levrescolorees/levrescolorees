@@ -357,7 +357,7 @@ Deno.serve(async req => {
       return jsonResponse({ error: 'Endereco invalido' }, 400);
     }
 
-    if (!['pix', 'card', 'boleto'].includes(payload.payment_method)) {
+    if (!['pix', 'card', 'boleto', 'whatsapp'].includes(payload.payment_method)) {
       return jsonResponse({ error: 'Metodo de pagamento invalido' }, 400);
     }
 
