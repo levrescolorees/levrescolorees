@@ -1,12 +1,14 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
+export type UserType = 'super_admin' | 'admin_only' | 'vendedor' | 'expedicao';
+
 export interface AdminUser {
   user_id: string;
   name: string;
   email: string;
   roles: string[];
-  type: 'super_admin' | 'admin_only';
+  type: UserType;
 }
 
 export const useAdminUsers = () => {
@@ -46,14 +48,14 @@ export const useAdminUsers = () => {
           name: profile?.name || '',
           email: profile?.email || '',
           roles: userRoles,
-          type: isSuperAdmin ? 'super_admin' : 'admin_only',
+          type: isSuperAdmin ? 'super_admin' : userRoles.includes('vendedor') ? 'vendedor' : userRoles.includes('expedicao') ? 'expedicao' : 'admin_only',
         };
       });
     },
   });
 
   const createUser = useMutation({
-    mutationFn: async (payload: { email: string; password: string; name: string; role: 'super_admin' | 'admin_only' }) => {
+    mutationFn: async (payload: { email: string; password: string; name: string; role: UserType }) => {
       const { data, error } = await supabase.functions.invoke('create-admin-user', {
         body: payload,
       });

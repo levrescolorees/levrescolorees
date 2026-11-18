@@ -36,6 +36,9 @@ const AdminMedia = lazy(() => import("./pages/admin/AdminMedia"));
 const AdminIntegrations = lazy(() => import("./pages/admin/AdminIntegrations"));
 const AdminIntegrationMercadoPago = lazy(() => import("./pages/admin/AdminIntegrationMercadoPago"));
 const AdminIntegrationSuperFrete = lazy(() => import("./pages/admin/AdminIntegrationSuperFrete"));
+const ManualOrders = lazy(() => import("./pages/admin/ManualOrders"));
+const ManualOrderNew = lazy(() => import("./pages/admin/ManualOrderNew"));
+const Expedition = lazy(() => import("./pages/admin/Expedition"));
 const AdminThemeEditor = lazy(() => import("./pages/admin/AdminThemeEditor"));
 
 const queryClient = new QueryClient({
@@ -87,6 +90,9 @@ const App = () => (
                   <Route path="pedidos" element={<AdminOrders />} />
                   <Route path="pedidos/:id" element={<OrderDetail />} />
                   <Route path="clientes" element={<AdminCustomers />} />
+                  <Route path="pedidos-manuais" element={<ManualOrders />} />
+                  <Route path="pedidos-manuais/novo" element={<ManualOrderNew />} />
+                  <Route path="expedicao" element={<Expedition />} />
                   <Route path="cupons" element={<AdminCoupons />} />
                   <Route path="midia" element={<AdminMedia />} />
                   <Route path="integracoes" element={<AdminIntegrations />} />

@@ -64,7 +64,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    if (!["super_admin", "admin_only"].includes(role)) {
+    if (!["super_admin", "admin_only", "vendedor", "expedicao"].includes(role)) {
       return new Response(JSON.stringify({ error: "Invalid role type" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -91,6 +91,8 @@ Deno.serve(async (req) => {
     // Insert roles
     const roles = role === "super_admin"
       ? [{ user_id: userId, role: "admin" }, { user_id: userId, role: "financeiro" }]
+      : role === "vendedor" ? [{ user_id: userId, role: "vendedor" }]
+      : role === "expedicao" ? [{ user_id: userId, role: "expedicao" }]
       : [{ user_id: userId, role: "operador" }];
 
     const { error: rolesError } = await adminClient.from("user_roles").insert(roles);

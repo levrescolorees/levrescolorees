@@ -45,7 +45,7 @@ const AdminSettings = () => {
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserPassword, setNewUserPassword] = useState('');
   const [newUserName, setNewUserName] = useState('');
-  const [newUserRole, setNewUserRole] = useState<'super_admin' | 'admin_only'>('admin_only');
+  const [newUserRole, setNewUserRole] = useState<'super_admin' | 'admin_only' | 'vendedor' | 'expedicao'>('admin_only');
 
   useEffect(() => {
     if (settings) {
@@ -330,7 +330,7 @@ const AdminSettings = () => {
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="font-body text-xs px-2 py-1 rounded bg-muted text-muted-foreground">
-                          {u.type === 'super_admin' ? 'Super Admin' : 'Admin'}
+                          {({ super_admin: 'Super Admin', admin_only: 'Admin', vendedor: 'Vendedor', expedicao: 'Expedição' } as Record<string,string>)[u.type]}
                         </span>
                         <Button
                           variant="ghost"
@@ -370,10 +370,12 @@ const AdminSettings = () => {
               </div>
               <div>
                 <label className="font-body text-sm font-medium text-foreground">Tipo</label>
-                <Select value={newUserRole} onValueChange={v => setNewUserRole(v as 'super_admin' | 'admin_only')}>
+                <Select value={newUserRole} onValueChange={v => setNewUserRole(v as 'super_admin' | 'admin_only' | 'vendedor' | 'expedicao')}>
                   <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="super_admin">Super Admin (acesso financeiro)</SelectItem>
+                    <SelectItem value="vendedor">Vendedor (pedidos manuais)</SelectItem>
+                    <SelectItem value="expedicao">Expedição (fila de separação)</SelectItem>
                     <SelectItem value="admin_only">Admin (sem acesso financeiro)</SelectItem>
                   </SelectContent>
                 </Select>

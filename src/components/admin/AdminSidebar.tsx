@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, Package, FolderOpen, ShoppingCart,
-  Users, Tag, Settings, Image, LogOut, Plug, Paintbrush
+  Users, Tag, Settings, Image, LogOut, Plug, Paintbrush, ClipboardList, Truck
 } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import { useAuth } from '@/hooks/useAuth';
@@ -15,6 +15,8 @@ const navItems = [
   { title: 'Produtos', url: '/admin/produtos', icon: Package },
   { title: 'Coleções', url: '/admin/colecoes', icon: FolderOpen },
   { title: 'Pedidos', url: '/admin/pedidos', icon: ShoppingCart },
+  { title: 'Pedidos Manuais', url: '/admin/pedidos-manuais', icon: ClipboardList },
+  { title: 'Expedição', url: '/admin/expedicao', icon: Truck },
   { title: 'Clientes', url: '/admin/clientes', icon: Users },
   { title: 'Cupons', url: '/admin/cupons', icon: Tag },
   { title: 'Mídia', url: '/admin/midia', icon: Image },
@@ -24,7 +26,9 @@ const navItems = [
 ];
 
 export function AdminSidebar() {
-  const { signOut, user } = useAuth();
+  const { signOut, user, role } = useAuth();
+  const allowed = role === 'vendedor' ? ['/admin/pedidos-manuais'] : role === 'expedicao' ? ['/admin/expedicao'] : null;
+  const items = allowed ? navItems.filter(i => allowed.includes(i.url)) : navItems;
 
   return (
     <Sidebar className="border-r border-sidebar-border">
@@ -37,7 +41,7 @@ export function AdminSidebar() {
           <SidebarGroupLabel className="font-body text-xs">Menu</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {navItems.map(item => (
+              {items.map(item => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
                     <NavLink

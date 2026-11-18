@@ -345,6 +345,156 @@ export type Database = {
         }
         Relationships: []
       }
+      manual_order_items: {
+        Row: {
+          created_at: string
+          id: string
+          order_id: string
+          product_id: string | null
+          product_name: string
+          quantity: number
+          unit_price: number
+          variant_id: string | null
+          variant_name: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          order_id: string
+          product_id?: string | null
+          product_name: string
+          quantity: number
+          unit_price: number
+          variant_id?: string | null
+          variant_name?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          order_id?: string
+          product_id?: string | null
+          product_name?: string
+          quantity?: number
+          unit_price?: number
+          variant_id?: string | null
+          variant_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "manual_order_items_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "manual_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "manual_order_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "manual_order_items_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "product_variants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      manual_order_status_history: {
+        Row: {
+          changed_by: string | null
+          created_at: string
+          from_status: Database["public"]["Enums"]["manual_order_status"] | null
+          id: string
+          order_id: string
+          to_status: Database["public"]["Enums"]["manual_order_status"]
+        }
+        Insert: {
+          changed_by?: string | null
+          created_at?: string
+          from_status?:
+            | Database["public"]["Enums"]["manual_order_status"]
+            | null
+          id?: string
+          order_id: string
+          to_status: Database["public"]["Enums"]["manual_order_status"]
+        }
+        Update: {
+          changed_by?: string | null
+          created_at?: string
+          from_status?:
+            | Database["public"]["Enums"]["manual_order_status"]
+            | null
+          id?: string
+          order_id?: string
+          to_status?: Database["public"]["Enums"]["manual_order_status"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "manual_order_status_history_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "manual_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      manual_orders: {
+        Row: {
+          assigned_to: string | null
+          attachment_name: string
+          attachment_path: string
+          created_at: string
+          created_by: string
+          customer_id: string
+          id: string
+          notes: string
+          order_number: number
+          status: Database["public"]["Enums"]["manual_order_status"]
+          total: number
+          updated_at: string
+        }
+        Insert: {
+          assigned_to?: string | null
+          attachment_name?: string
+          attachment_path: string
+          created_at?: string
+          created_by: string
+          customer_id: string
+          id?: string
+          notes?: string
+          order_number?: number
+          status?: Database["public"]["Enums"]["manual_order_status"]
+          total?: number
+          updated_at?: string
+        }
+        Update: {
+          assigned_to?: string | null
+          attachment_name?: string
+          attachment_path?: string
+          created_at?: string
+          created_by?: string
+          customer_id?: string
+          id?: string
+          notes?: string
+          order_number?: number
+          status?: Database["public"]["Enums"]["manual_order_status"]
+          total?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "manual_orders_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       order_items: {
         Row: {
           created_at: string
@@ -822,7 +972,24 @@ export type Database = {
           variants_count: number
         }[]
       }
+      create_manual_order: {
+        Args: {
+          p_attachment_name: string
+          p_attachment_path: string
+          p_customer_id: string
+          p_items: Json
+          p_notes: string
+        }
+        Returns: string
+      }
       get_public_store_settings: { Args: never; Returns: Json }
+      has_any_role: {
+        Args: {
+          _roles: Database["public"]["Enums"]["app_role"][]
+          _user_id: string
+        }
+        Returns: boolean
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -832,11 +999,19 @@ export type Database = {
       }
       is_admin_or_operador: { Args: { _user_id: string }; Returns: boolean }
       is_staff: { Args: { _user_id: string }; Returns: boolean }
+      set_manual_order_status: {
+        Args: {
+          p_order_id: string
+          p_status: Database["public"]["Enums"]["manual_order_status"]
+        }
+        Returns: undefined
+      }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
     }
     Enums: {
       app_role: "admin" | "operador" | "financeiro" | "vendedor" | "expedicao"
+      manual_order_status: "recebido" | "em_separacao" | "despachado"
       order_status:
         | "pendente"
         | "confirmado"
@@ -972,6 +1147,7 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "operador", "financeiro", "vendedor", "expedicao"],
+      manual_order_status: ["recebido", "em_separacao", "despachado"],
       order_status: [
         "pendente",
         "confirmado",

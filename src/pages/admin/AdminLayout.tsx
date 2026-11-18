@@ -7,7 +7,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Loader2 } from 'lucide-react';
 
 const AdminLayout = () => {
-  const { user, loading, isStaff } = useAuth();
+  const { user, loading, isStaff, role } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -22,6 +22,12 @@ const AdminLayout = () => {
       navigate('/admin/login');
     }
   }, [loading, user, isStaff, navigate]);
+
+  useEffect(() => {
+    if (loading || !user) return;
+    const home = role === 'vendedor' ? '/admin/pedidos-manuais' : role === 'expedicao' ? '/admin/expedicao' : null;
+    if (home && !location.pathname.startsWith(home)) navigate(home, { replace: true });
+  }, [loading, user, role, location.pathname, navigate]);
 
   if (loading) {
     return (
