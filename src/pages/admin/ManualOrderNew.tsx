@@ -26,6 +26,7 @@ const ManualOrderNew = () => {
   const [file, setFile] = useState<File | null>(null);
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
+  const [newProd, setNewProd] = useState<null | { name: string; sku: string; price: string; forLine?: string }>(null);
   const [newCust, setNewCust] = useState<null | { name: string; email: string; phone: string; cpf: string }>(null);
 
   const { data: customers = [] } = useQuery({
@@ -70,6 +71,23 @@ const ManualOrderNew = () => {
     setCustomerId(data.id); setCustomerSearch(newCust.name); setNewCust(null);
     qc.invalidateQueries({ queryKey: ['mo-customers'] });
     toast.success('Cliente cadastrado');
+  };
+
+  const createProduct = async () => {
+    const name = newProd?.name.trim();
+    const price = parseFloat((newProd?.price || '0').replace(',', '.')) || 0;
+    if (!name) { toast.error('Informe o nome do produto'); return; }
+    const slug = name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') + '-' + Math.random().toString(36).slice(2, 6);
+    const { data, error } = await db.from('products')
+      .insert({ name, slug, sku: newProd!.sku.trim() || null, retail_price: price })
+      .select('id, name, retail_price').single();
+    if (error) { toast.error(error.message); return; }
+    qc.setQueryData(['mo-products'], (old: any[] = []) => [...old, { ...data, product_variants: [] }].sort((a, b) => a.name.localeCompare(b.name)));
+    qc.invalidateQueries({ queryKey: ['admin'] });
+    const line = { key: crypto.randomUUID(), product_id: data.id, variant_id: '', quantity: 1, unit_price: price };
+    setLines(l => newProd!.forLine ? l.map(x => x.key === newProd!.forLine ? { ...x, product_id: data.id, variant_id: '', unit_price: price } : x) : [...l, line]);
+    setNewProd(null);
+    toast.success('Produto cadastrado e salvo em Produtos');
   };
 
   const submit = async () => {
@@ -119,7 +137,9 @@ const ManualOrderNew = () => {
       </Card>
 
       <Card><CardHeader className="flex flex-row items-center justify-between"><CardTitle className="text-base">Itens</CardTitle>
-          <Button size="sm" onClick={addLine}><Plus className="w-4 h-4 mr-1" />Adicionar item</Button></CardHeader>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" onClick={() => setNewProd({ name: '', sku: '', price: '' })}><Plus className="w-4 h-4 mr-1" />Novo produto</Button>
+            <Button size="sm" onClick={addLine}><Plus className="w-4 h-4 mr-1" />Adicionar item</Button></div></CardHeader>
         <CardContent className="space-y-3">
           {!lines.length && <p className="text-sm text-muted-foreground">Nenhum item adicionado.</p>}
           {lines.map(l => {
@@ -172,6 +192,20 @@ const ManualOrderNew = () => {
 
       <div className="flex justify-end"><Button size="lg" onClick={submit} disabled={saving}>
         {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Enviar para expedição</Button></div>
+
+      <Dialog open={!!newProd} onOpenChange={o => !o && setNewProd(null)}>
+        <DialogContent><DialogHeader><DialogTitle>Cadastrar novo produto</DialogTitle></DialogHeader>
+          {newProd && <div className="space-y-3">
+            <div><Label>Nome *</Label><Input autoFocus value={newProd.name} onChange={e => setNewProd({ ...newProd, name: e.target.value })} /></div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>SKU</Label><Input value={newProd.sku} onChange={e => setNewProd({ ...newProd, sku: e.target.value })} /></div>
+              <div><Label>Preço de venda</Label><Input inputMode="decimal" placeholder="0,00" value={newProd.price} onChange={e => setNewProd({ ...newProd, price: e.target.value })} /></div>
+            </div>
+            <p className="text-xs text-muted-foreground">O produto fica salvo em Produtos. Fotos, variações e estoque podem ser completados depois.</p>
+          </div>}
+          <DialogFooter><Button onClick={createProduct}>Cadastrar e adicionar</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!newCust} onOpenChange={o => !o && setNewCust(null)}>
         <DialogContent><DialogHeader><DialogTitle>Novo cliente</DialogTitle></DialogHeader>
