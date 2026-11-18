@@ -41,3 +41,10 @@ export async function fetchMyTenantId(): Promise<string | null> {
   const { data } = await (supabase as any).rpc('get_current_tenant_id');
   return (data as string) ?? null;
 }
+
+export function pickingProgress(itemIds: string[], checked: string[]) {
+  const set = new Set(checked);
+  const done = itemIds.filter(id => set.has(id)).length;
+  const total = itemIds.length;
+  return { done, total, percent: total ? Math.round((done / total) * 100) : 0, complete: total > 0 && done === total };
+}

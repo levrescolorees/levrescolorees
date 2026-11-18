@@ -40,6 +40,7 @@ const ManualOrders = lazy(() => import("./pages/admin/ManualOrders"));
 const ManualOrderNew = lazy(() => import("./pages/admin/ManualOrderNew"));
 const AdminTenants = lazy(() => import("./pages/admin/AdminTenants"));
 const TenantTeam = lazy(() => import("./pages/admin/TenantTeam"));
+const PickingList = lazy(() => import("./pages/admin/PickingList"));
 const Expedition = lazy(() => import("./pages/admin/Expedition"));
 const AdminThemeEditor = lazy(() => import("./pages/admin/AdminThemeEditor"));
 
@@ -95,6 +96,7 @@ const App = () => (
                   <Route path="pedidos-manuais" element={<ManualOrders />} />
                   <Route path="pedidos-manuais/novo" element={<ManualOrderNew />} />
                   <Route path="expedicao" element={<Expedition />} />
+                  <Route path="expedicao/:id/separacao" element={<PickingList />} />
                   <Route path="filiais" element={<AdminTenants />} />
                   <Route path="equipe" element={<TenantTeam />} />
                   <Route path="cupons" element={<AdminCoupons />} />

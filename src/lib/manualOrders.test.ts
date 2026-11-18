@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { NEXT_STATUS, validateAttachment, attachmentPath } from './manualOrders';
+import { NEXT_STATUS, validateAttachment, attachmentPath, pickingProgress } from './manualOrders';
 
 const f = (name: string, size = 100) => ({ name, size }) as File;
 
@@ -23,5 +23,16 @@ describe('pedidos manuais', () => {
 describe('anexo por filial', () => {
   it('caminho começa com o id da filial', () => {
     expect(attachmentPath('t1', 'PDF', new Date('2026-11-18T00:00:00Z'), 'abc')).toBe('t1/2026-11/abc.pdf');
+  });
+});
+
+describe('lista de separação', () => {
+  it('mostra progresso 2/5', () => {
+    const r = pickingProgress(['a','b','c','d','e'], ['a','c']);
+    expect(r.done).toBe(2); expect(r.total).toBe(5); expect(r.complete).toBe(false);
+  });
+  it('só libera concluir com todos marcados', () => {
+    expect(pickingProgress(['a','b'], ['a','b','x']).complete).toBe(true);
+    expect(pickingProgress([], []).complete).toBe(false);
   });
 });

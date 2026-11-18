@@ -4,7 +4,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { FileText, ArrowRight, Undo2, Loader2, Clock } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { FileText, ListChecks, ArrowRight, Undo2, Loader2, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 import { TenantFilter } from '@/components/admin/TenantFilter';
 import { STATUS_LABEL, NEXT_STATUS, openAttachment, brl, ManualOrderStatus } from '@/lib/manualOrders';
@@ -90,6 +91,9 @@ const Expedition = () => {
                       </ul>
                       {o.notes && <p className="text-xs bg-accent/40 rounded p-2 whitespace-pre-wrap">{o.notes}</p>}
                       <div className="text-xs text-muted-foreground">Total {brl(o.total)}</div>
+                      {col !== 'despachado' && <Button asChild size="sm" variant="secondary" className="w-full">
+                        <Link to={`/admin/expedicao/${o.id}/separacao`}><ListChecks className="w-4 h-4 mr-1" />Gerar Lista de Separação</Link>
+                      </Button>}
                       <Button variant="outline" size="sm" className="w-full" onClick={() => openAttachment(o.attachment_path).catch(e => toast.error(e.message))}>
                         <FileText className="w-4 h-4 mr-1" />Abrir pedido de compra
                       </Button>

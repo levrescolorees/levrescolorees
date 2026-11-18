@@ -29,6 +29,8 @@
 
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
+    --success: 142 71% 36%;
+    --success-foreground: 0 0% 100%;
 
     --border: 20 15% 88%;
     --input: 20 15% 88%;
@@ -78,6 +80,8 @@
     --accent-foreground: 0 0% 98%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 210 40% 98%;
+    --success: 142 71% 36%;
+    --success-foreground: 0 0% 100%;
     --border: 0 0% 18%;
     --input: 0 0% 18%;
     --ring: 340 78% 50%;
@@ -132,4 +136,18 @@
   .shadow-rose-warm {
     box-shadow: 0 4px 20px rgba(194, 24, 91, 0.08);
   }
+}
+
+.print-only { display: none; }
+@media print {
+  @page { margin: 12mm; }
+  html, body { background: #fff !important; color: #000 !important; }
+  .no-print, .no-print * { display: none !important; }
+  .print-only { display: block !important; }
+  .print-main { padding: 0 !important; background: #fff !important; overflow: visible !important; }
+  .picking-sheet { font-size: 12pt; color: #000; }
+  .picking-sheet table { width: 100%; border-collapse: collapse; }
+  .picking-sheet th, .picking-sheet td { border: 1px solid #000; padding: 6px 8px; }
+  .picking-sheet tr { break-inside: avoid; page-break-inside: avoid; }
+  .picking-sheet .pen-box { display: inline-block !important; width: 16px; height: 16px; border: 1.5px solid #000; }
 }

@@ -47,13 +47,13 @@ const AdminLayout = () => {
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full">
-        <AdminSidebar />
+        <div className="no-print contents"><AdminSidebar /></div>
         <div className="flex-1 flex flex-col">
-          <header className="h-14 flex items-center border-b border-border px-4 bg-card">
+          <header className="no-print h-14 flex items-center border-b border-border px-4 bg-card">
             <SidebarTrigger className="mr-4" />
             <h1 className="font-body text-sm font-medium text-foreground">Painel Administrativo</h1>
           </header>
-          <main className="flex-1 p-6 bg-muted/30 overflow-auto">
+          <main className="print-main flex-1 p-6 bg-muted/30 overflow-auto">
             <ErrorBoundary key={location.pathname}>
               <Suspense fallback={<div className="flex-1 flex items-center justify-center p-8"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>}>
                 <Outlet />
