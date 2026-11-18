@@ -29,16 +29,24 @@ const ManualOrderNew = () => {
   const [newProd, setNewProd] = useState<null | { name: string; sku: string; price: string; forLine?: string }>(null);
   const [newCust, setNewCust] = useState<null | { name: string; email: string; phone: string; cpf: string }>(null);
 
-  const { data: customers = [] } = useQuery({
-    queryKey: ['mo-customers', customerSearch],
+  const { data: customers = [], isFetching: searchingCust } = useQuery({
+    queryKey: ['mo-customers', customerSearch.trim()],
+    enabled: customerSearch.trim().length >= 2,
     queryFn: async () => {
-      let q = db.from('customers').select('id, name, email, company_name').order('name').limit(30);
-      if (customerSearch) q = q.or(`name.ilike.%${customerSearch}%,email.ilike.%${customerSearch}%,company_name.ilike.%${customerSearch}%`);
-      const { data, error } = await q;
+      const term = customerSearch.trim().replace(/[,()%*]/g, ' ').trim();
+      const digits = term.replace(/\D/g, '');
+      const ors = [`name.ilike.*${term}*`, `email.ilike.*${term}*`, `company_name.ilike.*${term}*`, `cpf.ilike.*${term}*`, `cnpj.ilike.*${term}*`];
+      if (digits.length >= 3 && digits !== term) {
+        const fuzzy = digits.split('').join('*');
+        ors.push(`cpf.ilike.*${fuzzy}*`, `cnpj.ilike.*${fuzzy}*`, `phone.ilike.*${fuzzy}*`);
+      }
+      const { data, error } = await db.from('customers')
+        .select('id, name, email, company_name, cpf, cnpj').or(ors.join(',')).order('name').limit(20);
       if (error) throw error;
       return data as any[];
     },
   });
+  const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
 
   const { data: products = [] } = useQuery({
     queryKey: ['mo-products'],
@@ -68,7 +76,7 @@ const ManualOrderNew = () => {
     if (!newCust?.name || !newCust.email) { toast.error('Nome e e-mail obrigatórios'); return; }
     const { data, error } = await db.from('customers').insert({ ...newCust }).select('id').single();
     if (error) { toast.error(error.message); return; }
-    setCustomerId(data.id); setCustomerSearch(newCust.name); setNewCust(null);
+    setCustomerId(data.id); setSelectedCustomer({ id: data.id, ...newCust }); setNewCust(null);
     qc.invalidateQueries({ queryKey: ['mo-customers'] });
     toast.success('Cliente cadastrado');
   };
@@ -123,16 +131,33 @@ const ManualOrderNew = () => {
 
       <Card><CardHeader><CardTitle className="text-base">Cliente</CardTitle></CardHeader>
         <CardContent className="space-y-3">
-          <div className="flex gap-2">
-            <Input placeholder="Buscar por nome, e-mail ou empresa" value={customerSearch} onChange={e => setCustomerSearch(e.target.value)} />
-            <Button variant="outline" onClick={() => setNewCust({ name: '', email: '', phone: '', cpf: '' })}><Plus className="w-4 h-4 mr-1" />Novo</Button>
-          </div>
-          <Select value={customerId} onValueChange={setCustomerId}>
-            <SelectTrigger><SelectValue placeholder="Selecione o cliente" /></SelectTrigger>
-            <SelectContent>
-              {customers.map((c: any) => <SelectItem key={c.id} value={c.id}>{c.name}{c.company_name ? ` — ${c.company_name}` : ''} ({c.email})</SelectItem>)}
-            </SelectContent>
-          </Select>
+          {selectedCustomer ? (
+            <div className="flex items-center justify-between rounded-md border border-primary bg-primary/5 p-3">
+              <div className="text-sm">
+                <div className="font-medium">{selectedCustomer.name}{selectedCustomer.company_name ? ` — ${selectedCustomer.company_name}` : ''}</div>
+                <div className="text-muted-foreground">{selectedCustomer.email} · {selectedCustomer.cnpj || selectedCustomer.cpf || 'sem documento'}</div>
+              </div>
+              <Button variant="ghost" size="sm" onClick={() => { setSelectedCustomer(null); setCustomerId(''); }}>Trocar</Button>
+            </div>
+          ) : (<>
+            <div className="flex gap-2">
+              <Input autoFocus placeholder="Buscar por nome, e-mail, CPF, CNPJ ou empresa" value={customerSearch} onChange={e => setCustomerSearch(e.target.value)} />
+              <Button variant="outline" onClick={() => setNewCust({ name: customerSearch, email: '', phone: '', cpf: '' })}><Plus className="w-4 h-4 mr-1" />Novo</Button>
+            </div>
+            {customerSearch.trim().length >= 2 && (
+              <div className="rounded-md border border-border divide-y divide-border max-h-64 overflow-auto">
+                {searchingCust && <div className="p-3 text-sm text-muted-foreground">Buscando...</div>}
+                {!searchingCust && !customers.length && <div className="p-3 text-sm text-muted-foreground">Nenhum cliente encontrado. Use "Novo" para cadastrar.</div>}
+                {customers.map((c: any) => (
+                  <button key={c.id} type="button" className="w-full text-left p-3 hover:bg-muted text-sm"
+                    onClick={() => { setSelectedCustomer(c); setCustomerId(c.id); }}>
+                    <div className="font-medium">{c.name}{c.company_name ? ` — ${c.company_name}` : ''}</div>
+                    <div className="text-muted-foreground text-xs">{c.email} · {c.cnpj || c.cpf || 'sem documento'}</div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </>)}
         </CardContent>
       </Card>
 
