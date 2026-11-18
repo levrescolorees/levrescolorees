@@ -1,1 +1,2 @@
 - Manual sales orders live in `manual_orders`/`manual_order_items` (separate from storefront `orders`) and are written only via the `create_manual_order` / `set_manual_order_status` RPCs, so creation is atomic and status transitions are enforced server-side.
+- Multi-tenant: branch users/customers/manual orders carry `tenant_id`; RLS uses `is_global_staff()` (admin/operador/financeiro see all) OR `tenant_id = get_current_tenant_id()`. Catalog/stock stay global; storefront customers default to the Matriz tenant. Purchase-order files are stored under `<tenant_id>/...`.

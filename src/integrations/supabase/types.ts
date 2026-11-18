@@ -228,6 +228,7 @@ export type Database = {
           is_reseller: boolean
           name: string
           phone: string
+          tenant_id: string
           updated_at: string
         }
         Insert: {
@@ -240,6 +241,7 @@ export type Database = {
           is_reseller?: boolean
           name?: string
           phone?: string
+          tenant_id?: string
           updated_at?: string
         }
         Update: {
@@ -252,9 +254,18 @@ export type Database = {
           is_reseller?: boolean
           name?: string
           phone?: string
+          tenant_id?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "customers_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       email_delivery_events: {
         Row: {
@@ -454,6 +465,7 @@ export type Database = {
           notes: string
           order_number: number
           status: Database["public"]["Enums"]["manual_order_status"]
+          tenant_id: string
           total: number
           updated_at: string
         }
@@ -468,6 +480,7 @@ export type Database = {
           notes?: string
           order_number?: number
           status?: Database["public"]["Enums"]["manual_order_status"]
+          tenant_id: string
           total?: number
           updated_at?: string
         }
@@ -482,6 +495,7 @@ export type Database = {
           notes?: string
           order_number?: number
           status?: Database["public"]["Enums"]["manual_order_status"]
+          tenant_id?: string
           total?: number
           updated_at?: string
         }
@@ -491,6 +505,13 @@ export type Database = {
             columns: ["customer_id"]
             isOneToOne: false
             referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "manual_orders_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
         ]
@@ -843,6 +864,7 @@ export type Database = {
           email: string
           id: string
           name: string
+          tenant_id: string
           updated_at: string
           user_id: string
         }
@@ -851,6 +873,7 @@ export type Database = {
           email?: string
           id?: string
           name?: string
+          tenant_id?: string
           updated_at?: string
           user_id: string
         }
@@ -859,10 +882,19 @@ export type Database = {
           email?: string
           id?: string
           name?: string
+          tenant_id?: string
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "profiles_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       shipping_rules: {
         Row: {
@@ -918,6 +950,33 @@ export type Database = {
           key?: string
           updated_at?: string
           value?: Json
+        }
+        Relationships: []
+      }
+      tenants: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string
+          slug: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          slug: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          slug?: string
+          updated_at?: string
         }
         Relationships: []
       }
@@ -982,6 +1041,7 @@ export type Database = {
         }
         Returns: string
       }
+      get_current_tenant_id: { Args: never; Returns: string }
       get_public_store_settings: { Args: never; Returns: Json }
       has_any_role: {
         Args: {
@@ -998,6 +1058,7 @@ export type Database = {
         Returns: boolean
       }
       is_admin_or_operador: { Args: { _user_id: string }; Returns: boolean }
+      is_global_staff: { Args: never; Returns: boolean }
       is_staff: { Args: { _user_id: string }; Returns: boolean }
       set_manual_order_status: {
         Args: {
@@ -1010,7 +1071,13 @@ export type Database = {
       show_trgm: { Args: { "": string }; Returns: string[] }
     }
     Enums: {
-      app_role: "admin" | "operador" | "financeiro" | "vendedor" | "expedicao"
+      app_role:
+        | "admin"
+        | "operador"
+        | "financeiro"
+        | "vendedor"
+        | "expedicao"
+        | "gerente"
       manual_order_status: "recebido" | "em_separacao" | "despachado"
       order_status:
         | "pendente"
@@ -1146,7 +1213,14 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "operador", "financeiro", "vendedor", "expedicao"],
+      app_role: [
+        "admin",
+        "operador",
+        "financeiro",
+        "vendedor",
+        "expedicao",
+        "gerente",
+      ],
       manual_order_status: ["recebido", "em_separacao", "despachado"],
       order_status: [
         "pendente",

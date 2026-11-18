@@ -38,6 +38,8 @@ const AdminIntegrationMercadoPago = lazy(() => import("./pages/admin/AdminIntegr
 const AdminIntegrationSuperFrete = lazy(() => import("./pages/admin/AdminIntegrationSuperFrete"));
 const ManualOrders = lazy(() => import("./pages/admin/ManualOrders"));
 const ManualOrderNew = lazy(() => import("./pages/admin/ManualOrderNew"));
+const AdminTenants = lazy(() => import("./pages/admin/AdminTenants"));
+const TenantTeam = lazy(() => import("./pages/admin/TenantTeam"));
 const Expedition = lazy(() => import("./pages/admin/Expedition"));
 const AdminThemeEditor = lazy(() => import("./pages/admin/AdminThemeEditor"));
 
@@ -93,6 +95,8 @@ const App = () => (
                   <Route path="pedidos-manuais" element={<ManualOrders />} />
                   <Route path="pedidos-manuais/novo" element={<ManualOrderNew />} />
                   <Route path="expedicao" element={<Expedition />} />
+                  <Route path="filiais" element={<AdminTenants />} />
+                  <Route path="equipe" element={<TenantTeam />} />
                   <Route path="cupons" element={<AdminCoupons />} />
                   <Route path="midia" element={<AdminMedia />} />
                   <Route path="integracoes" element={<AdminIntegrations />} />

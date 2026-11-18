@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, Package, FolderOpen, ShoppingCart,
-  Users, Tag, Settings, Image, LogOut, Plug, Paintbrush, ClipboardList, Truck
+  Users, Tag, Settings, Image, LogOut, Plug, Paintbrush, ClipboardList, Truck, Building2, UserPlus
 } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import { useAuth } from '@/hooks/useAuth';
@@ -17,6 +17,8 @@ const navItems = [
   { title: 'Pedidos', url: '/admin/pedidos', icon: ShoppingCart },
   { title: 'Pedidos Manuais', url: '/admin/pedidos-manuais', icon: ClipboardList },
   { title: 'Expedição', url: '/admin/expedicao', icon: Truck },
+  { title: 'Equipe da Filial', url: '/admin/equipe', icon: UserPlus },
+  { title: 'Filiais', url: '/admin/filiais', icon: Building2 },
   { title: 'Clientes', url: '/admin/clientes', icon: Users },
   { title: 'Cupons', url: '/admin/cupons', icon: Tag },
   { title: 'Mídia', url: '/admin/midia', icon: Image },
@@ -27,8 +29,9 @@ const navItems = [
 
 export function AdminSidebar() {
   const { signOut, user, role } = useAuth();
-  const allowed = role === 'vendedor' ? ['/admin/pedidos-manuais'] : role === 'expedicao' ? ['/admin/expedicao'] : null;
-  const items = allowed ? navItems.filter(i => allowed.includes(i.url)) : navItems;
+  const allowed = role === 'vendedor' ? ['/admin/pedidos-manuais'] : role === 'expedicao' ? ['/admin/expedicao'] : role === 'gerente' ? ['/admin/pedidos-manuais', '/admin/expedicao', '/admin/equipe'] : null;
+  const hidden = role === 'admin' ? ['/admin/equipe'] : ['/admin/equipe', '/admin/filiais'];
+  const items = allowed ? navItems.filter(i => allowed.includes(i.url)) : navItems.filter(i => !hidden.includes(i.url));
 
   return (
     <Sidebar className="border-r border-sidebar-border">

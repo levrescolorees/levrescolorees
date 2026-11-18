@@ -25,8 +25,13 @@ const AdminLayout = () => {
 
   useEffect(() => {
     if (loading || !user) return;
-    const home = role === 'vendedor' ? '/admin/pedidos-manuais' : role === 'expedicao' ? '/admin/expedicao' : null;
-    if (home && !location.pathname.startsWith(home)) navigate(home, { replace: true });
+    const allowed: Record<string, string[]> = {
+      vendedor: ['/admin/pedidos-manuais'],
+      expedicao: ['/admin/expedicao'],
+      gerente: ['/admin/pedidos-manuais', '/admin/expedicao', '/admin/equipe'],
+    };
+    const list = role ? allowed[role] : undefined;
+    if (list && !list.some(p => location.pathname.startsWith(p))) navigate(list[0], { replace: true });
   }, [loading, user, role, location.pathname, navigate]);
 
   if (loading) {

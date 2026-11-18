@@ -47,15 +47,34 @@ Deno.serve(async (req) => {
       _role: "admin",
     });
 
-    if (!isAdmin) {
-      return new Response(JSON.stringify({ error: "Forbidden: admin only" }), {
+    const { data: isGerente } = await adminClient.rpc("has_role", { _user_id: callerId, _role: "gerente" });
+    if (!isAdmin && !isGerente) {
+      return new Response(JSON.stringify({ error: "Forbidden" }), {
         status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     // Parse body
-    const { email, password, name, role } = await req.json();
+    const { email, password, name, role, tenant_id } = await req.json();
+    let tenantId: string | null = typeof tenant_id === "string" && tenant_id ? tenant_id : null;
+    if (!isAdmin) {
+      // Gerente: só cria vendedor/expedição na própria filial
+      if (!["vendedor", "expedicao"].includes(role)) {
+        return new Response(JSON.stringify({ error: "Gerente só pode criar vendedor ou expedição" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      const { data: prof } = await adminClient.from("profiles").select("tenant_id").eq("user_id", callerId).maybeSingle();
+      tenantId = prof?.tenant_id ?? null;
+      if (!tenantId) {
+        return new Response(JSON.stringify({ error: "Gerente sem filial" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+    }
+    if (tenantId) {
+      const { data: t } = await adminClient.from("tenants").select("id").eq("id", tenantId).maybeSingle();
+      if (!t) {
+        return new Response(JSON.stringify({ error: "Filial inválida" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+    }
 
     if (!email || !password || !name || !role) {
       return new Response(JSON.stringify({ error: "Missing fields" }), {
@@ -64,7 +83,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    if (!["super_admin", "admin_only", "vendedor", "expedicao"].includes(role)) {
+    if (!["super_admin", "admin_only", "vendedor", "expedicao", "gerente"].includes(role)) {
       return new Response(JSON.stringify({ error: "Invalid role type" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -93,7 +112,12 @@ Deno.serve(async (req) => {
       ? [{ user_id: userId, role: "admin" }, { user_id: userId, role: "financeiro" }]
       : role === "vendedor" ? [{ user_id: userId, role: "vendedor" }]
       : role === "expedicao" ? [{ user_id: userId, role: "expedicao" }]
+      : role === "gerente" ? [{ user_id: userId, role: "gerente" }]
       : [{ user_id: userId, role: "operador" }];
+
+    if (tenantId) {
+      await adminClient.from("profiles").update({ tenant_id: tenantId }).eq("user_id", userId);
+    }
 
     const { error: rolesError } = await adminClient.from("user_roles").insert(roles);
     if (rolesError) {

@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { ArrowLeft, Plus, Trash2, Upload, Loader2, FileText } from 'lucide-react';
-import { brl, validateAttachment } from '@/lib/manualOrders';
+import { brl, validateAttachment, attachmentPath, fetchMyTenantId } from '@/lib/manualOrders';
 
 const db = supabase as any;
 
@@ -41,7 +41,7 @@ const ManualOrderNew = () => {
         ors.push(`cpf.ilike.*${fuzzy}*`, `cnpj.ilike.*${fuzzy}*`, `phone.ilike.*${fuzzy}*`);
       }
       const { data, error } = await db.from('customers')
-        .select('id, name, email, company_name, cpf, cnpj').or(ors.join(',')).order('name').limit(20);
+        .select('id, name, email, company_name, cpf, cnpj, tenant_id').or(ors.join(',')).order('name').limit(20);
       if (error) throw error;
       return data as any[];
     },
@@ -74,9 +74,10 @@ const ManualOrderNew = () => {
 
   const createCustomer = async () => {
     if (!newCust?.name || !newCust.email) { toast.error('Nome e e-mail obrigatórios'); return; }
-    const { data, error } = await db.from('customers').insert({ ...newCust }).select('id').single();
+    const tenant_id = await fetchMyTenantId();
+    const { data, error } = await db.from('customers').insert({ ...newCust, ...(tenant_id ? { tenant_id } : {}) }).select('id, tenant_id').single();
     if (error) { toast.error(error.message); return; }
-    setCustomerId(data.id); setSelectedCustomer({ id: data.id, ...newCust }); setNewCust(null);
+    setCustomerId(data.id); setSelectedCustomer({ id: data.id, tenant_id: data.tenant_id, ...newCust }); setNewCust(null);
     qc.invalidateQueries({ queryKey: ['mo-customers'] });
     toast.success('Cliente cadastrado');
   };
@@ -103,9 +104,11 @@ const ManualOrderNew = () => {
     if (!lines.length || lines.some(l => !l.product_id || l.quantity <= 0)) return toast.error('Revise os itens');
     if (!file) return toast.error('Anexe o pedido de compra');
     setSaving(true);
-    const ext = file.name.split('.').pop()?.toLowerCase();
-    const path = `${new Date().toISOString().slice(0, 7)}/${crypto.randomUUID()}.${ext}`;
+    const ext = file.name.split('.').pop()?.toLowerCase() || 'pdf';
     try {
+      const tenantId = selectedCustomer?.tenant_id || await fetchMyTenantId();
+      if (!tenantId) throw new Error('Seu usuário não está vinculado a uma filial');
+      const path = attachmentPath(tenantId, ext);
       const up = await supabase.storage.from('purchase-orders').upload(path, file, { contentType: file.type || undefined });
       if (up.error) throw up.error;
       const { error } = await db.rpc('create_manual_order', {

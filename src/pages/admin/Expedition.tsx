@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { FileText, ArrowRight, Undo2, Loader2, Clock } from 'lucide-react';
 import { toast } from 'sonner';
+import { TenantFilter } from '@/components/admin/TenantFilter';
 import { STATUS_LABEL, NEXT_STATUS, openAttachment, brl, ManualOrderStatus } from '@/lib/manualOrders';
 
 const COLUMNS: ManualOrderStatus[] = ['recebido', 'em_separacao', 'despachado'];
@@ -23,15 +24,17 @@ const Expedition = () => {
   const qc = useQueryClient();
   const { isAdmin } = useAuth();
   const [busy, setBusy] = useState<string | null>(null);
+  const [tenant, setTenant] = useState('all');
 
   const { data = [], isLoading } = useQuery({
-    queryKey: ['manual-orders', 'expedition'],
+    queryKey: [...['manual-orders', 'expedition'], tenant],
     refetchInterval: 30_000,
     queryFn: async () => {
       const since = new Date(Date.now() - 7 * 864e5).toISOString();
       const { data, error } = await (supabase as any).from('manual_orders')
-        .select('id, order_number, status, total, notes, created_at, updated_at, attachment_path, attachment_name, customers(name, company_name, phone), manual_order_items(id, product_name, variant_name, quantity)')
+        .select('id, order_number, status, total, notes, created_at, updated_at, attachment_path, attachment_name, tenants(name), customers(name, company_name, phone), manual_order_items(id, product_name, variant_name, quantity)')
         .or(`status.neq.despachado,updated_at.gte.${since}`)
+        .match(tenant === 'all' ? {} : { tenant_id: tenant })
         .order('created_at', { ascending: true }).limit(500);
       if (error) throw error;
       return data as any[];
@@ -58,7 +61,7 @@ const Expedition = () => {
 
   return (
     <div className="space-y-4">
-      <h1 className="font-display text-2xl font-bold">Expedição</h1>
+      <div className="flex items-center justify-between"><h1 className="font-display text-2xl font-bold">Expedição</h1><TenantFilter value={tenant} onChange={setTenant} /></div>
       <div className="grid md:grid-cols-3 gap-4">
         {COLUMNS.map(col => {
           const list = data.filter(o => o.status === col);
@@ -78,7 +81,7 @@ const Expedition = () => {
                           <div className="font-bold">#{o.order_number}</div>
                           <div className="text-sm">{o.customers?.name}{o.customers?.company_name ? ` — ${o.customers.company_name}` : ''}</div>
                         </div>
-                        <span className="text-xs text-muted-foreground flex items-center gap-1"><Clock className="w-3 h-3" />{ago(o.created_at)}</span>
+                        <span className="text-xs text-muted-foreground flex flex-col items-end gap-1"><span className="flex items-center gap-1"><Clock className="w-3 h-3" />{ago(o.created_at)}</span>{o.tenants?.name && <span>{o.tenants.name}</span>}</span>
                       </div>
                     </CardHeader>
                     <CardContent className="p-3 pt-1 space-y-2">

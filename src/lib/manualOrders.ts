@@ -32,3 +32,12 @@ export async function openAttachment(path: string) {
 }
 
 export const brl = (v: number) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+export function attachmentPath(tenantId: string, ext: string, now = new Date(), id: string = crypto.randomUUID()) {
+  return `${tenantId}/${now.toISOString().slice(0, 7)}/${id}.${ext.toLowerCase()}`;
+}
+
+export async function fetchMyTenantId(): Promise<string | null> {
+  const { data } = await (supabase as any).rpc('get_current_tenant_id');
+  return (data as string) ?? null;
+}

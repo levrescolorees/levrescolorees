@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { NEXT_STATUS, validateAttachment } from './manualOrders';
+import { NEXT_STATUS, validateAttachment, attachmentPath } from './manualOrders';
 
 const f = (name: string, size = 100) => ({ name, size }) as File;
 
@@ -17,5 +17,11 @@ describe('pedidos manuais', () => {
   it('rejeita outros formatos e acima de 10MB', () => {
     expect(validateAttachment(f('a.png'))).not.toBeNull();
     expect(validateAttachment(f('a.pdf', 11 * 1024 * 1024))).not.toBeNull();
+  });
+});
+
+describe('anexo por filial', () => {
+  it('caminho começa com o id da filial', () => {
+    expect(attachmentPath('t1', 'PDF', new Date('2026-11-18T00:00:00Z'), 'abc')).toBe('t1/2026-11/abc.pdf');
   });
 });

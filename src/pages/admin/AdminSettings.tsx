@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 
 import { useStoreSettings, useShippingRules } from '@/hooks/useStoreSettings';
 import { useAdminUsers } from '@/hooks/useAdminUsers';
+import { useTenants } from '@/hooks/useTenants';
 // ─── Component ────────────────────────────────────────────
 const AdminSettings = () => {
   const qc = useQueryClient();
@@ -45,7 +46,9 @@ const AdminSettings = () => {
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserPassword, setNewUserPassword] = useState('');
   const [newUserName, setNewUserName] = useState('');
-  const [newUserRole, setNewUserRole] = useState<'super_admin' | 'admin_only' | 'vendedor' | 'expedicao'>('admin_only');
+  const { data: tenants = [] } = useTenants();
+  const [newUserTenant, setNewUserTenant] = useState('00000000-0000-0000-0000-000000000001');
+  const [newUserRole, setNewUserRole] = useState<'super_admin' | 'admin_only' | 'vendedor' | 'expedicao' | 'gerente'>('admin_only');
 
   useEffect(() => {
     if (settings) {
@@ -330,7 +333,7 @@ const AdminSettings = () => {
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="font-body text-xs px-2 py-1 rounded bg-muted text-muted-foreground">
-                          {({ super_admin: 'Super Admin', admin_only: 'Admin', vendedor: 'Vendedor', expedicao: 'Expedição' } as Record<string,string>)[u.type]}
+                          {({ super_admin: 'Super Admin', admin_only: 'Admin', vendedor: 'Vendedor', expedicao: 'Expedição', gerente: 'Gerente de filial' } as Record<string,string>)[u.type]}
                         </span>
                         <Button
                           variant="ghost"
@@ -370,16 +373,26 @@ const AdminSettings = () => {
               </div>
               <div>
                 <label className="font-body text-sm font-medium text-foreground">Tipo</label>
-                <Select value={newUserRole} onValueChange={v => setNewUserRole(v as 'super_admin' | 'admin_only' | 'vendedor' | 'expedicao')}>
+                <Select value={newUserRole} onValueChange={v => setNewUserRole(v as 'super_admin' | 'admin_only' | 'vendedor' | 'expedicao' | 'gerente')}>
                   <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="super_admin">Super Admin (acesso financeiro)</SelectItem>
                     <SelectItem value="vendedor">Vendedor (pedidos manuais)</SelectItem>
                     <SelectItem value="expedicao">Expedição (fila de separação)</SelectItem>
+                    <SelectItem value="gerente">Gerente de filial</SelectItem>
                     <SelectItem value="admin_only">Admin (sem acesso financeiro)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
+              {['vendedor', 'expedicao', 'gerente'].includes(newUserRole) && (
+                <div>
+                  <label className="font-body text-sm font-medium text-foreground">Filial</label>
+                  <Select value={newUserTenant} onValueChange={setNewUserTenant}>
+                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                    <SelectContent>{tenants.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+              )}
               <Button
                 onClick={() => {
                   if (!newUserEmail || !newUserPassword || !newUserName) {
@@ -387,7 +400,7 @@ const AdminSettings = () => {
                     return;
                   }
                   createUser.mutate(
-                    { email: newUserEmail, password: newUserPassword, name: newUserName, role: newUserRole },
+                    { email: newUserEmail, password: newUserPassword, name: newUserName, role: newUserRole, tenant_id: newUserTenant },
                     {
                       onSuccess: () => {
                         toast.success('Usuário criado com sucesso!');
